@@ -5,15 +5,19 @@ import { app, BrowserWindow, ipcMain, shell } from 'electron';
 import type { DesktopState, ProcessLogPayload } from './types';
 import {
   BACKEND_PORT,
+  DB_MODE,
   FRONTEND_PORT,
   HOSTNAME,
   MDNS_CHECK_INTERVAL_MS,
   MDNS_TTL,
+  PGLITE_HOST,
+  PGLITE_PORT,
   isProcessName,
 } from './main/constants';
 import { MdnsService } from './main/mdns-service';
+import { PgliteService } from './main/pglite-service';
 import { ProcessService } from './main/process-service';
-import type { RuntimePathContext } from './main/runtime-paths';
+import { resolveBackendDir, type RuntimePathContext } from './main/runtime-paths';
 
 let mainWindow: BrowserWindow | null = null;
 let appIsShuttingDown = false;
@@ -24,11 +28,25 @@ const runtimePathContext: RuntimePathContext = {
   isPackaged: app.isPackaged,
 };
 
+const backendDir = resolveBackendDir(runtimePathContext);
+
+const databaseService = new PgliteService({
+  mode: DB_MODE,
+  host: PGLITE_HOST,
+  port: PGLITE_PORT,
+  dataDir: path.join(app.getPath('userData'), 'pglite', 'main'),
+  backendDir,
+  externalDatabaseUrl: process.env.DATABASE_URL_EXTERNAL,
+  onLog: emitLog,
+  onStateChange: emitState,
+});
+
 const processService = new ProcessService({
   backendPort: BACKEND_PORT,
   frontendPort: FRONTEND_PORT,
   hostname: HOSTNAME,
   runtimePathContext,
+  resolveDatabaseUrl: () => databaseService.getDatabaseUrl(),
   onLog: emitLog,
   onStateChange: emitState,
 });
@@ -68,6 +86,7 @@ function snapshotState(): DesktopState {
   return {
     hostname: HOSTNAME,
     mdns: mdnsService.getSnapshot(),
+    database: databaseService.getSnapshot(),
     processes: processService.getSnapshot(),
   };
 }
@@ -158,6 +177,7 @@ async function shutdown(): Promise<void> {
   mdnsService.stopMonitor();
   await processService.stopAll();
   processService.forceStopChildren();
+  await databaseService.stop();
 }
 
 function handleTerminationSignal(signal: NodeJS.Signals): void {
@@ -187,6 +207,7 @@ for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP'] as const) {
 process.on('exit', () => {
   mdnsService.stopMonitor();
   processService.forceStopChildren();
+  void databaseService.stop();
 });
 
 app.on('before-quit', event => {
@@ -208,12 +229,24 @@ app.on('before-quit', event => {
 app.on('will-quit', () => {
   mdnsService.stopMonitor();
   processService.forceStopChildren();
+  void databaseService.stop();
 });
 
 app.whenReady().then(async () => {
   registerIpcHandlers();
   createWindow();
   mdnsService.startMonitor();
+
+  try {
+    await databaseService.start();
+  } catch (error) {
+    emitLog(
+      'database',
+      'error',
+      `Database startup failed: ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
+
   emitState();
   await processService.startAll();
 });

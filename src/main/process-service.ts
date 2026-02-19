@@ -20,6 +20,7 @@ interface ProcessServiceOptions {
   frontendPort: number;
   hostname: string;
   runtimePathContext: RuntimePathContext;
+  resolveDatabaseUrl: () => string | null;
   onLog: (target: string, stream: string, message: string) => void;
   onStateChange: () => void;
 }
@@ -29,6 +30,7 @@ export class ProcessService {
   private readonly frontendPort: number;
   private readonly hostname: string;
   private readonly runtimePathContext: RuntimePathContext;
+  private readonly resolveDatabaseUrl: () => string | null;
   private readonly onLog: (target: string, stream: string, message: string) => void;
   private readonly onStateChange: () => void;
 
@@ -51,6 +53,7 @@ export class ProcessService {
     this.frontendPort = options.frontendPort;
     this.hostname = options.hostname;
     this.runtimePathContext = options.runtimePathContext;
+    this.resolveDatabaseUrl = options.resolveDatabaseUrl;
     this.onLog = options.onLog;
     this.onStateChange = options.onStateChange;
 
@@ -247,13 +250,20 @@ export class ProcessService {
 
     ensureBackendRuntimeDirectories(backendDir);
 
+    const databaseUrl = this.resolveDatabaseUrl() || process.env.DATABASE_URL || null;
+    if (!databaseUrl) {
+      throw new Error('No database URL available. Start database service first.');
+    }
+
     const env = {
       ...process.env,
+      ELECTRON_RUN_AS_NODE: '1',
       NODE_ENV: 'production',
       PORT: String(this.backendPort),
       CLIENT_URL: `http://${this.hostname}:${this.frontendPort}`,
       COOKIE_SECURE: process.env.COOKIE_SECURE ?? 'false',
       COOKIE_SAME_SITE: process.env.COOKIE_SAME_SITE ?? 'lax',
+      DATABASE_URL: databaseUrl,
       ...buildPrismaRuntimeEnv(backendDir),
     };
 
@@ -276,6 +286,7 @@ export class ProcessService {
         cwd: frontendStaticDir,
         env: {
           ...process.env,
+          ELECTRON_RUN_AS_NODE: '1',
           NODE_ENV: 'production',
         },
         detached: false,

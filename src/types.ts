@@ -1,5 +1,7 @@
 export type ProcessName = 'backend' | 'frontend';
 export type ProcessStatus = 'stopped' | 'starting' | 'running' | 'stopping' | 'error';
+export type DatabaseMode = 'pglite' | 'external-postgres';
+export type DatabaseStatus = 'stopped' | 'starting' | 'running' | 'error';
 
 export interface ManagedProcessState {
   name: ProcessName;
@@ -20,9 +22,21 @@ export interface MdnsState {
   ip: string | null;
 }
 
+export interface DatabaseState {
+  mode: DatabaseMode;
+  status: DatabaseStatus;
+  running: boolean;
+  host: string | null;
+  port: number | null;
+  dataDir: string | null;
+  connectionString: string | null;
+  lastError: string | null;
+}
+
 export interface DesktopState {
   hostname: string;
   mdns: MdnsState;
+  database: DatabaseState;
   processes: Record<ProcessName, ManagedProcessState>;
 }
 
