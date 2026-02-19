@@ -8,36 +8,34 @@ import crossSpawn from "cross-spawn";
 const rootDir = path.resolve(__dirname, "..");
 const npmBin = process.platform === "win32" ? "npm.cmd" : "npm";
 
+const c = {
+  reset: "\x1b[0m",
+  bold: (s: string) => `\x1b[1m${s}\x1b[0m`,
+  dim: (s: string) => `\x1b[2m${s}\x1b[0m`,
+  cyan: (s: string) => `\x1b[36m${s}\x1b[0m`,
+  green: (s: string) => `\x1b[32m${s}\x1b[0m`,
+  yellow: (s: string) => `\x1b[33m${s}\x1b[0m`,
+  red: (s: string) => `\x1b[31m${s}\x1b[0m`,
+  step: (s: string) => `\x1b[36m→ ${s}\x1b[0m`,
+  success: (s: string) => `\x1b[32m✔ ${s}\x1b[0m`,
+  warn: (s: string) => `\x1b[33m⚠ ${s}\x1b[0m`,
+  error: (s: string) => `\x1b[31m✖ ${s}\x1b[0m`,
+};
+
 interface ParsedArgs {
   yes: boolean;
-  tag: string | null;
 }
 
 function parseArgs(argv: string[]): ParsedArgs {
   let yes = false;
-  let tag: string | null = null;
 
-  for (let index = 0; index < argv.length; index += 1) {
-    const arg = argv[index];
-
+  for (const arg of argv) {
     if (arg === "--yes") {
       yes = true;
-      continue;
-    }
-
-    if (arg === "--tag") {
-      const value = argv[index + 1];
-      if (!value) {
-        throw new Error("--tag requires a value");
-      }
-
-      tag = value.trim();
-      index += 1;
-      continue;
     }
   }
 
-  return { yes, tag };
+  return { yes };
 }
 
 function runCommand(label: string, command: string, args: string[], cwd = rootDir): Promise<void> {
@@ -85,17 +83,37 @@ function getPackageVersion(): string {
   return version;
 }
 
-function normalizeTag(inputTag: string): string {
-  const tag = inputTag.trim();
-  if (!tag) {
-    throw new Error("Release tag cannot be empty");
+function compareVersions(a: string, b: string): number {
+  const parse = (v: string) => v.split(".").map(Number);
+  const [aMajor = 0, aMinor = 0, aPatch = 0] = parse(a);
+  const [bMajor = 0, bMinor = 0, bPatch = 0] = parse(b);
+  if (aMajor !== bMajor) return aMajor - bMajor;
+  if (aMinor !== bMinor) return aMinor - bMinor;
+  return aPatch - bPatch;
+}
+
+/** Returns the highest semver release tag on origin, or null if none exist yet. */
+function getLatestRemoteVersion(): string | null {
+  const result = runGit(["ls-remote", "--tags", "origin"]);
+  if (result.status !== 0) {
+    throw new Error(`Unable to query remote tags.\n${result.stderr || result.stdout}`.trim());
   }
 
-  if (!tag.startsWith("v")) {
-    throw new Error(`Release tag must start with "v". Received "${tag}"`);
+  const semverPattern = /refs\/tags\/(v?(\d+\.\d+\.\d+))$/;
+  const versions: string[] = [];
+
+  for (const line of result.stdout.trim().split("\n")) {
+    const match = semverPattern.exec(line);
+    if (match) {
+      versions.push(match[2]); // bare x.y.z
+    }
   }
 
-  return tag;
+  if (versions.length === 0) {
+    return null;
+  }
+
+  return versions.sort((a, b) => compareVersions(b, a))[0];
 }
 
 function localTagExists(tag: string): boolean {
@@ -184,35 +202,22 @@ async function askYesNo(question: string): Promise<boolean> {
   }
 }
 
-async function askTag(defaultTag: string): Promise<string> {
-  const rl = createInterface({ input, output });
-  try {
-    const answer = (await rl.question(`Release tag [${defaultTag}]: `)).trim();
-    if (!answer) {
-      return defaultTag;
-    }
-
-    return answer;
-  } finally {
-    rl.close();
-  }
-}
-
 async function run(): Promise<void> {
   const parsedArgs = parseArgs(process.argv.slice(2));
 
-  console.log("Preparing build resources (`npm run prepare:resources`)...");
+  console.log(c.step("Preparing build resources (`npm run prepare:resources`)..."));
   await runCommand("prepare-resources", npmBin, ["run", "prepare:resources"]);
 
-  console.log("Running local production build check (`npm run build`)...");
+  console.log(c.step("Running local production build check (`npm run build`)..."));
   await runCommand("local-prod-build", npmBin, ["run", "build"]);
-  console.log("Local production build passed.");
+  console.log(c.success("Local production build passed."));
 
   const shouldRelease =
-    parsedArgs.yes || (await askYesNo("Do you want to trigger GitHub release build now? (y/N): "));
+    parsedArgs.yes ||
+    (await askYesNo(c.cyan("Do you want to trigger GitHub release build now? (y/N): ")));
 
   if (!shouldRelease) {
-    console.log("Release cancelled. Local build artifacts are available in `dist/`.");
+    console.log(c.warn("Release cancelled. Local build artifacts are available in `dist/`."));
     return;
   }
 
@@ -221,20 +226,35 @@ async function run(): Promise<void> {
   assertWorkTreeClean();
   const currentBranch = getCurrentBranch();
 
-  console.log(`Pushing current branch "${currentBranch}" to origin...`);
-  await runCommand("git-push-branch", "git", ["push", "origin", currentBranch]);
+  const packageVersion = getPackageVersion();
+  const tag = `v${packageVersion}`;
 
-  let candidateTag = parsedArgs.tag || `v${getPackageVersion()}`;
+  console.log(c.step("Checking latest release on origin..."));
+  const latestRemoteVersion = getLatestRemoteVersion();
 
-  if (!parsedArgs.tag) {
-    candidateTag = await askTag(candidateTag);
+  if (latestRemoteVersion === null) {
+    console.log(c.warn("No previous releases found. Proceeding with first release."));
+  } else {
+    console.log(c.dim(`Latest release: v${latestRemoteVersion}`));
   }
 
-  const tag = normalizeTag(candidateTag);
+  if (latestRemoteVersion !== null && compareVersions(packageVersion, latestRemoteVersion) <= 0) {
+    throw new Error(
+      [
+        `package.json version "${packageVersion}" must be greater than the latest release "${latestRemoteVersion}".`,
+        `Update the version in package.json before pushing to release.`,
+      ].join("\n"),
+    );
+  }
+
+  console.log(c.bold(c.green(`Releasing version: ${tag}`)));
+
+  console.log(c.step(`Pushing current branch "${currentBranch}" to origin...`));
+  await runCommand("git-push-branch", "git", ["push", "origin", currentBranch]);
 
   if (localTagExists(tag) || remoteTagExists(tag)) {
     throw new Error(
-      `Tag "${tag}" already exists locally or on origin. Use a new version tag (for example: --tag v1.0.1).`,
+      `Tag "${tag}" already exists. Update the version in package.json before pushing to release.`,
     );
   }
 
@@ -242,11 +262,13 @@ async function run(): Promise<void> {
   await runCommand("git-push-tag", "git", ["push", "origin", tag]);
 
   console.log(
-    `Branch ${currentBranch} and tag ${tag} pushed. GitHub Actions will build Windows artifacts and publish the release.`,
+    c.success(
+      `Branch "${currentBranch}" and tag "${tag}" pushed. GitHub Actions will build Windows artifacts and publish the release.`,
+    ),
   );
 }
 
 void run().catch((error) => {
-  console.error(error instanceof Error ? error.message : String(error));
+  console.error(c.error(error instanceof Error ? error.message : String(error)));
   process.exit(1);
 });
