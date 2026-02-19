@@ -1,0 +1,56 @@
+{
+  "name": "sasthotech-desktop-app-v2",
+  "version": "1.0.0",
+  "description": "Electron shell for SasthoTech local backend and frontend",
+  "main": "build/main.js",
+  "type": "commonjs",
+  "scripts": {
+    "clean": "tsx scripts/clean.ts",
+    "compile": "npm run clean && tsc -p tsconfig.json && tsx scripts/copy-renderer.ts",
+    "prepare:resources": "tsx scripts/prepare-resources.ts",
+    "package:builder": "electron-builder",
+    "build": "tsx scripts/build-and-package.ts",
+    "build:dir": "tsx scripts/build-and-package.ts --dir",
+    "start": "npm run compile && electron .",
+    "dev": "npm run compile && electron ."
+  },
+  "dependencies": {
+    "multicast-dns": "^7.2.5",
+    "serve": "^14.2.4"
+  },
+  "devDependencies": {
+    "@types/node": "^24.4.0",
+    "electron": "^34.3.0",
+    "electron-builder": "^24.13.3",
+    "tsx": "^4.20.3",
+    "typescript": "^5.9.2"
+  },
+  "build": {
+    "appId": "com.sasthotech.desktopv2",
+    "productName": "SasthoTech Desktop V2",
+    "asar": true,
+    "asarUnpack": [
+      "**/node_modules/@prisma/**",
+      "**/node_modules/.prisma/**",
+      "**/backend/**/node_modules/@prisma/**",
+      "**/backend/**/node_modules/.prisma/**"
+    ],
+    "files": [
+      "build/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "build-resources/backend",
+        "to": "backend"
+      },
+      {
+        "from": "build-resources/frontend",
+        "to": "frontend"
+      }
+    ],
+    "directories": {
+      "output": "dist"
+    }
+  }
+}

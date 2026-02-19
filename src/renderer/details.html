@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SasthoTech Desktop V2 - Details</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body data-page="details">
+    <div class="page-shell">
+      <main class="container details-container">
+        <header class="hero">
+          <div class="hero-icon">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+              <polyline points="14 2 14 8 20 8" />
+              <line x1="16" y1="13" x2="8" y2="13" />
+              <line x1="16" y1="17" x2="8" y2="17" />
+              <polyline points="10 9 9 9 8 9" />
+            </svg>
+          </div>
+          <div class="hero-text">
+            <h1>Logs &amp; Diagnostics</h1>
+          </div>
+          <p id="mdns-status" class="mdns-status">mDNS: initializing…</p>
+        </header>
+
+        <section class="details-toolbar">
+          <button class="neutral-btn" id="back-to-main">← Back to Dashboard</button>
+          <div class="tab-row">
+            <button class="tab-btn active" data-tab="frontend" type="button">Frontend</button>
+            <button class="tab-btn" data-tab="backend" type="button">Backend</button>
+          </div>
+        </section>
+
+        <section class="details-grid">
+          <article class="process-list">
+            <h2 id="details-title">Frontend Details</h2>
+            <dl class="details-list">
+              <div>
+                <dt>Status</dt>
+                <dd id="details-status">-</dd>
+              </div>
+              <div>
+                <dt>PID</dt>
+                <dd id="details-pid">-</dd>
+              </div>
+              <div>
+                <dt>Port</dt>
+                <dd id="details-port">-</dd>
+              </div>
+              <div>
+                <dt>Restart Count</dt>
+                <dd id="details-restarts">-</dd>
+              </div>
+              <div>
+                <dt>Last Exit Code</dt>
+                <dd id="details-last-exit">-</dd>
+              </div>
+              <div>
+                <dt>Last Signal</dt>
+                <dd id="details-last-signal">-</dd>
+              </div>
+            </dl>
+          </article>
+
+          <article class="process-list">
+            <div class="logs-header">
+              <h2 id="details-logs-title">Frontend Logs</h2>
+              <button class="neutral-btn" id="clear-tab-logs">Clear</button>
+            </div>
+            <pre id="details-logs"></pre>
+          </article>
+        </section>
+      </main>
+    </div>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
