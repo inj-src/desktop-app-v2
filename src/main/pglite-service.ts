@@ -1,14 +1,14 @@
 import fs from 'node:fs';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
 
 import { PGlite } from '@electric-sql/pglite';
 import { pg_trgm } from '@electric-sql/pglite/contrib/pg_trgm';
 import { PGLiteSocketServer } from '@electric-sql/pglite-socket';
+import bcrypt from 'bcryptjs';
+import dotenv from 'dotenv';
 
 import type { DatabaseMode, DatabaseState } from '../types';
-import { buildPrismaRuntimeEnv } from './runtime-paths';
 
 const EMBEDDED_MIGRATIONS_TABLE = '_embedded_pglite_migrations';
 
@@ -154,13 +154,7 @@ export class PgliteService {
       await this.runEmbeddedMigrations();
 
       await this.startSocketServer();
-      const setupDatabaseUrl = normalizeDatabaseUrl(this.socketServer!.getServerConn(), this.host, this.port);
-      const setupRan = await this.runBackendSetupScript(setupDatabaseUrl);
-
-      if (setupRan) {
-        // setup.js uses Prisma over pgwire; reset socket sessions to avoid stale prepared statements.
-        await this.restartSocketServer();
-      }
+      await this.runEmbeddedSetup();
 
       const databaseUrl = normalizeDatabaseUrl(this.socketServer!.getServerConn(), this.host, this.port);
 
@@ -229,15 +223,6 @@ export class PgliteService {
 
     await socketServer.start();
     this.socketServer = socketServer;
-  }
-
-  private async restartSocketServer(): Promise<void> {
-    if (this.socketServer) {
-      await this.socketServer.stop();
-      this.socketServer = null;
-    }
-
-    await this.startSocketServer();
   }
 
   private async runCompatibilityChecks(): Promise<void> {
@@ -337,39 +322,58 @@ export class PgliteService {
     );
   }
 
-  private async runBackendSetupScript(databaseUrl: string): Promise<boolean> {
-    const setupScriptPath = path.join(this.backendDir, 'setup.js');
+  private async runEmbeddedSetup(): Promise<boolean> {
     const shouldRunSetup = process.env.PGLITE_RUN_SETUP !== 'false';
 
     if (!shouldRunSetup) {
-      this.onLog('database', 'system', 'Skipping setup.js because PGLITE_RUN_SETUP=false.');
+      this.onLog('database', 'system', 'Skipping embedded setup because PGLITE_RUN_SETUP=false.');
       return false;
     }
 
-    if (!fs.existsSync(setupScriptPath)) {
-      this.onLog('database', 'system', `No setup.js found at ${setupScriptPath}; skipping setup.`);
+    if (!this.db) {
+      throw new Error('PGlite is not initialized.');
+    }
+
+    const fileEnv = this.readBackendEnvFile();
+    const superAdminName = (process.env.SUPER_ADMIN_NAME || fileEnv.SUPER_ADMIN_NAME || '').trim();
+    const superAdminEmail = (process.env.SUPER_ADMIN_EMAIL || fileEnv.SUPER_ADMIN_EMAIL || '').trim();
+    const superAdminPassword = (process.env.SUPER_ADMIN_PASSWORD || fileEnv.SUPER_ADMIN_PASSWORD || '').trim();
+
+    if (!superAdminName || !superAdminEmail || !superAdminPassword) {
+      this.onLog(
+        'database',
+        'system',
+        'Skipping embedded setup because SUPER_ADMIN_NAME/SUPER_ADMIN_EMAIL/SUPER_ADMIN_PASSWORD are not configured.'
+      );
       return false;
     }
 
-    this.onLog('database', 'system', 'Running backend setup.js against embedded PGlite database...');
+    const passwordHash = bcrypt.hashSync(superAdminPassword, 12);
 
-    await runNodeCommand({
-      cmd: process.execPath,
-      args: [setupScriptPath],
-      cwd: this.backendDir,
-      env: {
-        ...process.env,
-        ELECTRON_RUN_AS_NODE: '1',
-        DATABASE_URL: databaseUrl,
-        PRISMA_HIDE_UPDATE_MESSAGE: '1',
-        ...buildPrismaRuntimeEnv(this.backendDir),
-      },
-      onStdout: message => this.onLog('database', 'stdout', `[setup] ${message}`),
-      onStderr: message => this.onLog('database', 'stderr', `[setup] ${message}`),
-    });
+    await this.db.query(`DELETE FROM "public"."User" WHERE "role" = 'superadmin';`);
+    await this.db.query(
+      `INSERT INTO "public"."User" ("id", "name", "email", "password", "role", "createdAt", "updatedAt")
+       VALUES ($1, $2, $3, $4, $5, NOW(), NOW());`,
+      [randomUUID(), superAdminName, superAdminEmail, passwordHash, 'superadmin']
+    );
 
-    this.onLog('database', 'system', 'setup.js finished successfully.');
+    this.onLog('database', 'system', 'Embedded superadmin setup finished successfully.');
     return true;
+  }
+
+  private readBackendEnvFile(): Record<string, string> {
+    const envPath = path.join(this.backendDir, '.env');
+    if (!fs.existsSync(envPath)) {
+      return {};
+    }
+
+    try {
+      return dotenv.parse(fs.readFileSync(envPath, 'utf8'));
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      this.onLog('database', 'error', `Failed to parse ${envPath}: ${reason}`);
+      return {};
+    }
   }
 
   private async importPrismaMigrationHistory(migrations: EmbeddedMigrationFile[]): Promise<void> {
@@ -481,47 +485,6 @@ function loadEmbeddedMigrations(migrationsDir: string): EmbeddedMigrationFile[] 
   }
 
   return migrations;
-}
-
-interface NodeCommandOptions {
-  cmd: string;
-  args: string[];
-  cwd: string;
-  env: NodeJS.ProcessEnv;
-  onStdout: (message: string) => void;
-  onStderr: (message: string) => void;
-}
-
-async function runNodeCommand(options: NodeCommandOptions): Promise<void> {
-  await new Promise<void>((resolve, reject) => {
-    const child = spawn(options.cmd, options.args, {
-      cwd: options.cwd,
-      env: options.env,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      detached: false,
-    });
-
-    child.stdout.on('data', chunk => {
-      options.onStdout(String(chunk));
-    });
-
-    child.stderr.on('data', chunk => {
-      options.onStderr(String(chunk));
-    });
-
-    child.on('error', error => {
-      reject(error);
-    });
-
-    child.on('exit', code => {
-      if (code === 0) {
-        resolve();
-        return;
-      }
-
-      reject(new Error(`Command failed (${options.cmd} ${options.args.join(' ')}) with exit code ${code}`));
-    });
-  });
 }
 
 function normalizeDatabaseUrl(connectionString: string, host: string, port: number): string {

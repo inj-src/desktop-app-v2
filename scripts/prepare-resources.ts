@@ -18,6 +18,7 @@ const resourcesDir = path.join(rootDir, 'build-resources');
 const tempResourcesDir = path.join(rootDir, 'build-resources.tmp');
 const existingBackendResourcesDir = path.join(resourcesDir, 'backend');
 const existingFrontendResourcesDir = path.join(resourcesDir, 'frontend');
+const backendBundleFile = 'sasthotech-hospital-backend-v1.cjs';
 
 const npmBin = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 
@@ -165,14 +166,11 @@ async function resolveFreshBuildSelection(): Promise<FreshBuildSelection> {
   return askFreshBuildSelection();
 }
 
-function runCommand(label: string, cwd: string, args: string[], extraEnv: Record<string, string> = {}): Promise<void> {
+function runCommand(label: string, cwd: string, args: string[]): Promise<void> {
   return new Promise((resolve, reject) => {
     const child = spawn(npmBin, args, {
       cwd,
-      env: {
-        ...process.env,
-        ...extraEnv,
-      },
+      env: process.env,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
 
@@ -224,7 +222,7 @@ function copyBackendResources(targetResourcesRootDir: string): void {
   const backendOutputDir = path.join(targetResourcesRootDir, 'backend');
   fs.mkdirSync(backendOutputDir, { recursive: true });
 
-  const staticItems = ['src', 'prisma', 'package.json', 'package-lock.json', 'data', 'secretKeys', 'setup.js'];
+  const staticItems = ['src', 'prisma', 'package.json', 'data', 'secretKeys', backendBundleFile];
 
   for (const item of staticItems) {
     copyIfExists(path.join(backendProjectDir, item), path.join(backendOutputDir, item));
@@ -243,6 +241,7 @@ function copyBackendResources(targetResourcesRootDir: string): void {
   fs.mkdirSync(path.join(backendOutputDir, 'data', 'image'), { recursive: true });
   fs.mkdirSync(path.join(backendOutputDir, 'data', 'file'), { recursive: true });
   fs.mkdirSync(path.join(backendOutputDir, 'secretKeys'), { recursive: true });
+  fs.rmSync(path.join(backendOutputDir, 'node_modules'), { recursive: true, force: true });
 }
 
 function copyFrontendResources(targetResourcesRootDir: string): void {
@@ -255,23 +254,11 @@ function copyFrontendResources(targetResourcesRootDir: string): void {
   copyIfExists(staticDir, path.join(frontendOutputDir, staticDirName));
 }
 
-function removePrepareScriptFromPackageJson(projectDir: string): void {
-  const packageJsonPath = path.join(projectDir, 'package.json');
-  if (!fs.existsSync(packageJsonPath)) {
-    return;
+function assertBackendBundleExists(targetResourcesRootDir: string): void {
+  const bundledEntryPath = path.join(targetResourcesRootDir, 'backend', backendBundleFile);
+  if (!fs.existsSync(bundledEntryPath)) {
+    throw new Error(`Backend bundled entry was not found: ${bundledEntryPath}`);
   }
-
-  const packageJsonRaw = fs.readFileSync(packageJsonPath, 'utf8');
-  const packageJson = JSON.parse(packageJsonRaw) as {
-    scripts?: Record<string, string>;
-  };
-
-  if (!packageJson.scripts?.prepare) {
-    return;
-  }
-
-  delete packageJson.scripts.prepare;
-  fs.writeFileSync(packageJsonPath, `${JSON.stringify(packageJson, null, 2)}\n`, 'utf8');
 }
 
 export async function prepareResources(): Promise<void> {
@@ -322,13 +309,12 @@ export async function prepareResources(): Promise<void> {
 
   if (freshBuildSelection.backend) {
     copyBackendResources(tempResourcesDir);
-    const backendOutputDir = path.join(tempResourcesDir, 'backend');
-    removePrepareScriptFromPackageJson(backendOutputDir);
-    console.log('Installing backend production dependencies into build-resources/backend...');
-    await runCommand('backend-install', backendOutputDir, ['ci', '--omit=dev']);
   } else {
     copyIfExists(existingBackendResourcesDir, path.join(tempResourcesDir, 'backend'));
   }
+
+  fs.rmSync(path.join(tempResourcesDir, 'backend', 'node_modules'), { recursive: true, force: true });
+  assertBackendBundleExists(tempResourcesDir);
 
   if (freshBuildSelection.frontend) {
     copyFrontendResources(tempResourcesDir);

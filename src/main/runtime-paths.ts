@@ -6,12 +6,18 @@ export interface RuntimePathContext {
   isPackaged: boolean;
 }
 
+export const BACKEND_BUNDLE_FILE = 'sasthotech-hospital-backend-v1.cjs';
+
 export function resolveBackendDir(context: RuntimePathContext): string {
   if (context.isPackaged) {
     return path.join(context.appRootDir, 'backend');
   }
 
   return path.resolve(context.appRootDir, '../sasthotech-hospital-backend-v1');
+}
+
+export function resolveBackendEntry(context: RuntimePathContext): string {
+  return path.join(resolveBackendDir(context), BACKEND_BUNDLE_FILE);
 }
 
 export function resolveFrontendRootDir(context: RuntimePathContext): string {

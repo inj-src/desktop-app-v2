@@ -18,6 +18,8 @@
   "dependencies": {
     "@electric-sql/pglite": "^0.3.15",
     "@electric-sql/pglite-socket": "^0.0.20",
+    "bcryptjs": "^3.0.3",
+    "dotenv": "^17.3.1",
     "electron-updater": "^6.8.3",
     "multicast-dns": "^7.2.5",
     "serve": "^14.2.4"

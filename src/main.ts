@@ -46,6 +46,7 @@ const processService = new ProcessService({
   backendPort: BACKEND_PORT,
   frontendPort: FRONTEND_PORT,
   hostname: HOSTNAME,
+  databaseMode: DB_MODE,
   runtimePathContext,
   resolveDatabaseUrl: () => databaseService.getDatabaseUrl(),
   onLog: emitLog,

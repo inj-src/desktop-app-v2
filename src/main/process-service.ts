@@ -3,12 +3,13 @@ import path from 'node:path';
 import { spawn, type ChildProcessByStdio } from 'node:child_process';
 import type { Readable } from 'node:stream';
 
-import type { ManagedProcessState, ProcessName } from '../types';
+import type { DatabaseMode, ManagedProcessState, ProcessName } from '../types';
 import { PROCESS_NAMES } from './constants';
 import {
   buildPrismaRuntimeEnv,
   ensureBackendRuntimeDirectories,
   resolveBackendDir,
+  resolveBackendEntry,
   resolveFrontendStaticDir,
   type RuntimePathContext,
 } from './runtime-paths';
@@ -19,6 +20,7 @@ interface ProcessServiceOptions {
   backendPort: number;
   frontendPort: number;
   hostname: string;
+  databaseMode: DatabaseMode;
   runtimePathContext: RuntimePathContext;
   resolveDatabaseUrl: () => string | null;
   onLog: (target: string, stream: string, message: string) => void;
@@ -29,6 +31,7 @@ export class ProcessService {
   private readonly backendPort: number;
   private readonly frontendPort: number;
   private readonly hostname: string;
+  private readonly databaseMode: DatabaseMode;
   private readonly runtimePathContext: RuntimePathContext;
   private readonly resolveDatabaseUrl: () => string | null;
   private readonly onLog: (target: string, stream: string, message: string) => void;
@@ -52,6 +55,7 @@ export class ProcessService {
     this.backendPort = options.backendPort;
     this.frontendPort = options.frontendPort;
     this.hostname = options.hostname;
+    this.databaseMode = options.databaseMode;
     this.runtimePathContext = options.runtimePathContext;
     this.resolveDatabaseUrl = options.resolveDatabaseUrl;
     this.onLog = options.onLog;
@@ -242,7 +246,7 @@ export class ProcessService {
 
   private spawnBackend(): ManagedChildProcess {
     const backendDir = resolveBackendDir(this.runtimePathContext);
-    const backendEntry = path.join(backendDir, 'src', 'index.js');
+    const backendEntry = resolveBackendEntry(this.runtimePathContext);
 
     if (!fs.existsSync(backendEntry)) {
       throw new Error(`Backend entry file was not found: ${backendEntry}`);
@@ -261,6 +265,9 @@ export class ProcessService {
       NODE_ENV: 'production',
       PORT: String(this.backendPort),
       CLIENT_URL: `http://${this.hostname}:${this.frontendPort}`,
+      DB_MODE: this.databaseMode,
+      PRISMA_PG_POOL_MAX:
+        process.env.PRISMA_PG_POOL_MAX ?? (this.databaseMode === 'pglite' ? '1' : '10'),
       COOKIE_SECURE: process.env.COOKIE_SECURE ?? 'false',
       COOKIE_SAME_SITE: process.env.COOKIE_SAME_SITE ?? 'lax',
       DATABASE_URL: databaseUrl,
