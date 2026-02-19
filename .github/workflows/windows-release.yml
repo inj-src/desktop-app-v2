@@ -1,0 +1,49 @@
+name: Windows Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-publish:
+    runs-on: windows-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_RELEASE_OWNER: ${{ github.repository_owner }}
+      GH_RELEASE_REPO: ${{ github.event.repository.name }}
+
+    steps:
+      - name: Checkout desktop app
+        uses: actions/checkout@v4
+
+      - name: Validate prepared resources
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ ! -d "${GITHUB_WORKSPACE}/build-resources/backend" || ! -d "${GITHUB_WORKSPACE}/build-resources/frontend" ]]; then
+            echo "::error::Missing build-resources/backend or build-resources/frontend."
+            echo "::error::Run 'npm run prepare:resources' locally first, commit required outputs, then push again."
+            exit 1
+          fi
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm ci
+
+      - name: Build and publish Windows release
+        shell: bash
+        run: npm run build -- --publish always --win nsis --x64

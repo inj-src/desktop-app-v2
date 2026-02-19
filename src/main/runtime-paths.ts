@@ -50,54 +50,7 @@ export function ensureBackendRuntimeDirectories(backendDir: string): void {
   }
 }
 
-function findFirstFileByPrefix(dirPath: string, prefix: string, suffix = ''): string | null {
-  if (!fs.existsSync(dirPath)) {
-    return null;
-  }
-
-  const entries = fs.readdirSync(dirPath, { withFileTypes: true });
-
-  for (const entry of entries) {
-    if (!entry.isFile()) {
-      continue;
-    }
-
-    if (!entry.name.startsWith(prefix)) {
-      continue;
-    }
-
-    if (suffix && !entry.name.endsWith(suffix)) {
-      continue;
-    }
-
-    return path.join(dirPath, entry.name);
-  }
-
-  return null;
-}
-
-export function buildPrismaRuntimeEnv(backendDir: string): Record<string, string> {
-  const runtimeEnv: Record<string, string> = {
-    PRISMA_CLIENT_ENGINE_TYPE: 'library',
-  };
-
-  const prismaClientDir = path.join(backendDir, 'node_modules', '.prisma', 'client');
-  const prismaEnginesDir = path.join(backendDir, 'node_modules', '@prisma', 'engines');
-
-  const queryLibrary = findFirstFileByPrefix(prismaClientDir, 'libquery_engine', '.node');
-  if (queryLibrary) {
-    runtimeEnv.PRISMA_QUERY_ENGINE_LIBRARY = queryLibrary;
-  }
-
-  const queryBinary = findFirstFileByPrefix(prismaClientDir, 'query_engine');
-  if (queryBinary) {
-    runtimeEnv.PRISMA_QUERY_ENGINE_BINARY = queryBinary;
-  }
-
-  const schemaBinary = findFirstFileByPrefix(prismaEnginesDir, 'schema-engine');
-  if (schemaBinary) {
-    runtimeEnv.PRISMA_SCHEMA_ENGINE_BINARY = schemaBinary;
-  }
-
-  return runtimeEnv;
+export function buildPrismaRuntimeEnv(_backendDir: string): Record<string, string> {
+  // Rust-free Prisma (engineType="client") does not require engine binary path overrides.
+  return {};
 }

@@ -1,10 +1,33 @@
 import path from 'node:path';
-import { spawn } from 'node:child_process';
-
-import { prepareResources } from './prepare-resources';
+import fs from 'node:fs';
+import { spawn, spawnSync } from 'node:child_process';
 
 const rootDir = path.resolve(__dirname, '..');
 const npmBin = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+const resourcesRootDir = path.join(rootDir, 'build-resources');
+const backendResourcesDir = path.join(resourcesRootDir, 'backend');
+const frontendResourcesDir = path.join(resourcesRootDir, 'frontend');
+
+function assertPreparedResources(): void {
+  if (
+    fs.existsSync(resourcesRootDir) &&
+    fs.statSync(resourcesRootDir).isDirectory() &&
+    fs.existsSync(backendResourcesDir) &&
+    fs.statSync(backendResourcesDir).isDirectory() &&
+    fs.existsSync(frontendResourcesDir) &&
+    fs.statSync(frontendResourcesDir).isDirectory()
+  ) {
+    return;
+  }
+
+  throw new Error(
+    [
+      'Missing prepared build resources.',
+      'Run `npm run prepare:resources` first, then retry `npm run build`.',
+      `Expected folder: ${resourcesRootDir}`,
+    ].join('\n')
+  );
+}
 
 function runNpm(label: string, args: string[]): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -35,18 +58,80 @@ function runNpm(label: string, args: string[]): Promise<void> {
   });
 }
 
-async function run(): Promise<void> {
-  const dirMode = process.argv.includes('--dir');
+function parseGitHubRepoFromRemoteUrl(value: string): { owner: string; repo: string } | null {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
 
-  await prepareResources();
+  const withoutGit = trimmed.endsWith('.git') ? trimmed.slice(0, -4) : trimmed;
+  const match = withoutGit.match(/github\.com[/:]([^/]+)\/([^/]+)$/i);
+  if (!match) {
+    return null;
+  }
+
+  return { owner: match[1], repo: match[2] };
+}
+
+function ensureReleaseEnvFallbacks(): void {
+  const hasOwner = Boolean((process.env.GH_RELEASE_OWNER || '').trim());
+  const hasRepo = Boolean((process.env.GH_RELEASE_REPO || '').trim());
+
+  if (hasOwner && hasRepo) {
+    return;
+  }
+
+  const remoteResult = spawnSync('git', ['config', '--get', 'remote.origin.url'], {
+    cwd: rootDir,
+    env: process.env,
+    encoding: 'utf8',
+  });
+
+  if (remoteResult.status === 0) {
+    const parsed = parseGitHubRepoFromRemoteUrl(remoteResult.stdout || '');
+    if (parsed) {
+      process.env.GH_RELEASE_OWNER = process.env.GH_RELEASE_OWNER || parsed.owner;
+      process.env.GH_RELEASE_REPO = process.env.GH_RELEASE_REPO || parsed.repo;
+      return;
+    }
+  }
+
+  process.env.GH_RELEASE_OWNER = process.env.GH_RELEASE_OWNER || 'local';
+  process.env.GH_RELEASE_REPO = process.env.GH_RELEASE_REPO || 'local';
+}
+
+async function run(): Promise<void> {
+  const cliArgs = process.argv.slice(2);
+  const dirMode = cliArgs.includes('--dir');
+  const extraBuilderArgs = cliArgs.filter(arg => arg !== '--dir');
+
+  assertPreparedResources();
+  ensureReleaseEnvFallbacks();
   await runNpm('desktop-compile', ['run', 'compile']);
 
   const packageArgs = ['run', 'package:builder'];
+  const builderArgs: string[] = [];
+
   if (dirMode) {
-    packageArgs.push('--', '--dir');
+    builderArgs.push('--dir');
+  }
+
+  builderArgs.push(...extraBuilderArgs);
+
+  if (builderArgs.length > 0) {
+    packageArgs.push('--', ...builderArgs);
   }
 
   await runNpm('desktop-package', packageArgs);
+
+  console.warn(
+    [
+      '',
+      '[warning] Build completed using existing `build-resources` only.',
+      '[warning] Backend/frontend may be out of date because this command does not rebuild those repositories.',
+      '[warning] Run `npm run prepare:resources` before build when you need fresh artifacts.',
+    ].join('\n')
+  );
 }
 
 void run().catch(error => {

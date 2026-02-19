@@ -11,12 +11,14 @@
     "package:builder": "electron-builder",
     "build": "tsx scripts/build-and-package.ts",
     "build:dir": "tsx scripts/build-and-package.ts --dir",
+    "build:prod": "tsx scripts/build-prod.ts",
     "start": "npm run compile && electron .",
     "dev": "npm run compile && electron ."
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.3.15",
     "@electric-sql/pglite-socket": "^0.0.20",
+    "electron-updater": "^6.8.3",
     "multicast-dns": "^7.2.5",
     "serve": "^14.2.4"
   },
@@ -55,6 +57,24 @@
     ],
     "directories": {
       "output": "dist"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "${env.GH_RELEASE_OWNER}",
+        "repo": "${env.GH_RELEASE_REPO}",
+        "releaseType": "release"
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
     }
   }
 }

@@ -18,6 +18,7 @@ import { MdnsService } from './main/mdns-service';
 import { PgliteService } from './main/pglite-service';
 import { ProcessService } from './main/process-service';
 import { resolveBackendDir, type RuntimePathContext } from './main/runtime-paths';
+import { UpdaterService } from './main/updater-service';
 
 let mainWindow: BrowserWindow | null = null;
 let appIsShuttingDown = false;
@@ -57,6 +58,14 @@ const mdnsService = new MdnsService({
   checkIntervalMs: MDNS_CHECK_INTERVAL_MS,
   onLog: emitLog,
   onStateChange: emitState,
+});
+
+const updaterService = new UpdaterService({
+  getMainWindow: () => mainWindow,
+  onLog: emitLog,
+  onPrepareInstall: async () => {
+    await shutdown();
+  },
 });
 
 function emitLog(target: string, stream: string, message: string): void {
@@ -249,6 +258,7 @@ app.whenReady().then(async () => {
 
   emitState();
   await processService.startAll();
+  updaterService.start();
 });
 
 app.on('window-all-closed', () => {
