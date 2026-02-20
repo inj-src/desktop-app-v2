@@ -1,9 +1,9 @@
 import path from 'node:path';
 import fs from 'node:fs';
-import { spawn, spawnSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
+import crossSpawn from 'cross-spawn';
 
 const rootDir = path.resolve(__dirname, '..');
-const npmBin = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 const resourcesRootDir = path.join(rootDir, 'build-resources');
 const backendResourcesDir = path.join(resourcesRootDir, 'backend');
 const frontendResourcesDir = path.join(resourcesRootDir, 'frontend');
@@ -17,7 +17,7 @@ function buildSpawnEnv(): NodeJS.ProcessEnv {
       continue;
     }
 
-    if (key.includes('=') || key.includes('\0')) {
+    if (!key || key.includes('=') || key.includes('\0') || value.includes('\0')) {
       continue;
     }
 
@@ -50,7 +50,7 @@ function assertPreparedResources(): void {
 
 function runNpm(label: string, args: string[]): Promise<void> {
   return new Promise((resolve, reject) => {
-    const child = spawn(npmBin, args, {
+    const child = crossSpawn('npm', args, {
       cwd: rootDir,
       env: buildSpawnEnv(),
       stdio: ['ignore', 'pipe', 'pipe'],
