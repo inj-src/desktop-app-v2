@@ -1,0 +1,611 @@
+model Store {
+  id           String     @id @default(cuid())
+  name         String // "Main Pharmacy", "Emergency Supplies", "Lab Store A"
+  code         String? // Store code/SKU
+  description  String?
+  location     String? // Physical location
+  isActive     Boolean    @default(true)
+  // Relations
+  diagnostic   Diagnostic @relation(fields: [diagnosticId], references: [id], onDelete: Cascade)
+  diagnosticId String
+
+  inventoryItems           InventoryItem[]
+  storeItems               StoreInventoryItems[]
+  transactions             InventoryTransaction[]
+  deductionSettings        InventoryItemDeductionSetting[]
+  triggerEvent             TriggerEvent[]
+  deductionFromStoreEvents TriggerEvent[]                  @relation("DeductionFromStore")
+  itemsConsumptionTrackers ItemConsumptionTracker[]
+  billInventoryItems       BillInventoryItem[]
+  defaultIndoorStores      defaultInventoryStore[]
+  userInventoryStores      UserInventoryStore[]
+  tag                      StoreTag? // one to one with StoreTag that means one store can have only one tag like "outdoor", "hospital", "lab", "emergency", "pharmacy"
+  // tag          StoreTag? --- IGNORE ---
+
+  user   User?   @relation(fields: [userId], references: [id])
+  userId String?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  // Branch and Department Relations (NEW)
+  branch       Branch?     @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  branchId     String?
+  department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  departmentId String?
+
+  @@index([diagnosticId])
+  @@index([isActive])
+  @@index([code])
+  @@index([deletedAt])
+  @@index([diagnosticId, isActive, deletedAt])
+  @@index([diagnosticId, branchId, departmentId])
+}
+
+model StoreTag {
+  id String @id @default(cuid())
+
+  store   Store  @relation(fields: [storeId], references: [id])
+  storeId String @unique
+
+  tag   Tag    @relation(fields: [tagId], references: [id])
+  tagId String @unique
+
+  diagnostic   Diagnostic @relation(fields: [diagnosticId], references: [id], onDelete: Cascade)
+  diagnosticId String
+
+  deductionSettings InventoryItemDeductionSetting[]
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  // Branch and Department Relations (NEW)
+  branch       Branch?     @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  branchId     String?
+  department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  departmentId String?
+
+  @@unique([storeId, tagId])
+  @@index([diagnosticId])
+  @@index([deletedAt])
+  @@index([diagnosticId, branchId, departmentId])
+}
+
+model Tag {
+  id       String  @id @default(cuid())
+  name     String // "outdoor", "hospital", "lab", "emergency", "pharmacy"
+  category String? // "subsection", "department", "type"
+  color    String? // For UI purposes
+
+  diagnostic   Diagnostic @relation(fields: [diagnosticId], references: [id], onDelete: Cascade)
+  diagnosticId String
+
+  stores StoreTag? // one to one with StoreTag that means one tag can not be assigned to multiple stores
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt()
+  deletedAt DateTime?
+
+  // Branch and Department Relations (NEW)
+  branch       Branch?     @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  branchId     String?
+  department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  departmentId String?
+
+  @@unique([name, diagnosticId])
+  @@index([diagnosticId])
+  @@index([category])
+  @@index([deletedAt])
+  @@index([diagnosticId, branchId, departmentId])
+}
+
+model InventoryItem {
+  id          String  @id @default(cuid())
+  name        String
+  code        String? // Item code/SKU
+  description String?
+  category    String? // Medicine, Equipment, Supplies, etc.
+  unit        String  @default("pcs") // pcs, ml, mg, etc.
+
+  availableStock Float @default(0) // Total available stock across all stores
+  reservedStock  Float @default(0) // Stock reserved for pending orders
+
+  isSellable   Boolean @default(true) // Can be sold to patients
+  isConsumable Boolean @default(false) // Is a consumable item (e.g. syringe, bandage)
+  isActive     Boolean @default(true) // Is item active and available for use
+  // Pricing
+  costPrice    Float?
+  sellingPrice Float?
+
+  // Item specifications
+  manufacturer  String?
+  expiryTracked Boolean @default(false)
+  batchTracked  Boolean @default(false)
+
+  // Stock level alerts
+  minimumStock    Float? @default(100)
+  maximumStock    Float? @default(0)
+  expiryAlertDays Int?   @default(30) // Days before expiry to alert
+
+  // Relations
+  diagnostic   Diagnostic @relation(fields: [diagnosticId], references: [id], onDelete: Cascade)
+  diagnosticId String
+  store        Store      @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  storeId      String
+  user         User?      @relation(fields: [userId], references: [id])
+  userId       String?
+
+  storeItems        StoreInventoryItems[]
+  transactions      InventoryTransaction[]
+  packageItems      InventoryPackageItem[]
+  deductionSettings InventoryItemDeductionSetting[]
+  billItems         BillInventoryItem[]
+  // availability  ItemAvailability?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt()
+  deletedAt DateTime?
+
+  // Branch and Department Relations (NEW)
+  branch       Branch?     @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  branchId     String?
+  department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  departmentId String?
+
+  @@unique([code, diagnosticId])
+  @@index([diagnosticId])
+  @@index([diagnosticId, category])
+  @@index([storeId])
+  @@index([isActive])
+  @@index([isSellable])
+  @@index([isConsumable])
+  @@index([deletedAt])
+  @@index([diagnosticId, isActive, deletedAt])
+  @@index([storeId, isActive, deletedAt])
+  @@index([category, isActive])
+  @@index([diagnosticId, branchId, departmentId])
+}
+
+model StoreInventoryItems {
+  id String @id @default(cuid())
+
+  // Current stock levels
+  currentStock   Float  @default(0)
+  reservedStock  Float  @default(0) // Reserved for pending orders
+  availableStock Float  @default(0) // currentStock - reservedStock
+  initialStock   Float? @default(0)
+
+  // Stock level alerts
+  minimumStock Float? @default(100)
+  maximumStock Float? @default(0)
+
+  // Batch/Expiry tracking
+  batchNumber     String?
+  expiryDate      DateTime?
+  manufactureDate DateTime?
+
+  // Relations
+  store        Store                  @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  storeId      String
+  item         InventoryItem          @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  itemId       String
+  diagnostic   Diagnostic             @relation(fields: [diagnosticId], references: [id], onDelete: Cascade)
+  diagnosticId String
+  user         User?                  @relation(fields: [userId], references: [id])
+  userId       String?
+  transactions InventoryTransaction[]
+  billItems    BillInventoryItem[]
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt()
+  deletedAt DateTime?
+
+  // Branch and Department Relations (NEW)
+  branch       Branch?     @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  branchId     String?
+  department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  departmentId String?
+
+  @@unique([storeId, itemId, batchNumber])
+  @@index([storeId, itemId])
+  @@index([expiryDate])
+  @@index([diagnosticId])
+  @@index([deletedAt])
+  @@index([currentStock])
+  @@index([minimumStock])
+  @@index([storeId, currentStock])
+  @@index([diagnosticId, deletedAt])
+  @@index([expiryDate, deletedAt])
+  @@index([diagnosticId, branchId, departmentId])
+}
+
+model BillInventoryItem {
+  id             String @id @default(cuid())
+  name           String
+  storeName      String
+  tagName        String
+  quantity       Float
+  unitCost       Float?
+  totalCost      Float?
+  inventoryItems Json?
+
+  // Relations
+  bill             HospitalBill           @relation(fields: [billId], references: [id], onDelete: Cascade)
+  billId           String
+  diagnostic       Diagnostic             @relation(fields: [diagnosticId], references: [id], onDelete: Cascade)
+  diagnosticId     String
+  inventoryItem    InventoryItem          @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  itemId           String
+  storeInventory   StoreInventoryItems    @relation(fields: [storeInventoryId], references: [id])
+  storeInventoryId String
+  store            Store?                 @relation(fields: [storeId], references: [id])
+  storeId          String?
+  transactions     InventoryTransaction[]
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt()
+  deletedAt DateTime?
+
+  // Branch and Department Relations (NEW)
+  branch       Branch?     @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  branchId     String?
+  department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  departmentId String?
+
+  @@index([diagnosticId])
+  @@index([diagnosticId, branchId, departmentId])
+}
+
+model InventoryTransaction {
+  id String @id @default(cuid())
+
+  type      TransactionType // IN, OUT, TRANSFER, ADJUSTMENT
+  quantity  Float
+  unitCost  Float?
+  totalCost Float?
+
+  // Transaction details
+  reason        String? // Purchase, Sale, Bill Deduction, etc.
+  referenceType String? // "bill", "purchase_order", "transfer"
+  referenceId   String? // ID of the bill, PO, etc.
+
+  // Relations
+  store                   Store                @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  storeId                 String
+  item                    InventoryItem        @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  itemId                  String
+  storeInventory          StoreInventoryItems? @relation(fields: [storeInventoryId], references: [id])
+  storeInventoryId        String?
+  billInventoryItem       BillInventoryItem?   @relation(fields: [billInventoryItemId], references: [id])
+  billInventoryItemId     String?
+  // itemDeductionExecution ItemDeductionExecution[]
+  triggerEventInInventory TriggerEvent[]
+
+  // User tracking
+  user         User?      @relation(fields: [userId], references: [id])
+  userId       String?
+  diagnostic   Diagnostic @relation(fields: [diagnosticId], references: [id], onDelete: Cascade)
+  diagnosticId String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt()
+
+  // Branch and Department Relations (NEW)
+  branch       Branch?     @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  branchId     String?
+  department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  departmentId String?
+
+  @@index([storeId, itemId])
+  @@index([referenceType, referenceId])
+  @@index([createdAt])
+  @@index([diagnosticId])
+  @@index([type])
+  @@index([userId])
+  @@index([diagnosticId, type])
+  @@index([storeId, type, createdAt])
+  @@index([diagnosticId, createdAt])
+  @@index([diagnosticId, branchId, departmentId])
+}
+
+enum TransactionType {
+  IN // Stock received/purchased
+  OUT // Stock consumed/sold
+  TRANSFER // Transfer between stores
+  ADJUSTMENT // Manual stock adjustments
+}
+
+model InventoryPackage {
+  id          String  @id @default(cuid())
+  name        String // "Surgery Kit A", "Lab Test Package", "Emergency Kit"
+  code        String? // Package SKU
+  description String?
+  category    String? // "surgical", "lab", "emergency", "treatment"
+
+  // Package settings
+  isActive   Boolean @default(true)
+  isTemplate Boolean @default(false) // Reusable template vs one-time package
+
+  // Pricing (can be different from sum of individual items)
+  totalCost    Float? // Total cost of package
+  sellingPrice Float? // Selling price of package
+
+  // Package composition
+  items InventoryPackageItem[]
+
+  // Relations
+  diagnostic   Diagnostic @relation(fields: [diagnosticId], references: [id], onDelete: Cascade)
+  diagnosticId String
+  user         User?      @relation(fields: [userId], references: [id])
+  userId       String?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt()
+  deletedAt DateTime?
+
+  // Branch and Department Relations (NEW)
+  branch       Branch?     @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  branchId     String?
+  department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  departmentId String?
+
+  @@unique([code, diagnosticId])
+  @@index([diagnosticId])
+  @@index([diagnosticId, category])
+  @@index([isActive])
+  @@index([isTemplate])
+  @@index([deletedAt])
+  @@index([diagnosticId, isActive, deletedAt])
+  @@index([diagnosticId, branchId, departmentId])
+}
+
+model InventoryPackageItem {
+  id            String  @id @default(cuid())
+  quantity      Float // How many of this item in the package
+  isOptional    Boolean @default(false) // Optional items in package
+  canSubstitute Boolean @default(false) // Can be substituted with similar items
+  notes         String? // Special notes for this item in package
+
+  // Relations
+  package      InventoryPackage @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  packageId    String
+  item         InventoryItem    @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  itemId       String
+  diagnostic   Diagnostic       @relation(fields: [diagnosticId], references: [id], onDelete: Cascade)
+  diagnosticId String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt()
+
+  // Branch and Department Relations (NEW)
+  branch       Branch?     @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  branchId     String?
+  department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  departmentId String?
+
+  @@unique([packageId, itemId])
+  @@index([packageId])
+  @@index([itemId])
+  @@index([diagnosticId])
+  @@index([isOptional])
+  @@index([canSubstitute])
+  @@index([diagnosticId, branchId, departmentId])
+}
+
+// Item-Centric Inventory Deduction Policy Models
+// Each inventory item can have deduction settings for Tests, Operations, and Bills
+
+// Deduction settings for each inventory item (supports multiple trigger types)
+model InventoryItemDeductionSetting {
+  id String @id @default(cuid())
+
+  // Which inventory item this setting belongs to
+  itemId String
+  item   InventoryItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  // Trigger type and entity (flexible approach)
+  triggerType TriggerType // TEST_COMPLETION, OPERATION, OUTDOOR_BILL_TEST, INDOOR_BILL_TEST, BILL_CREATION
+
+  // Entity relationships (only one will be set based on triggerType)
+  testId String?
+  test   Test?   @relation(fields: [testId], references: [id], onDelete: Cascade)
+
+  operationId String?
+  operation   Operation? @relation(fields: [operationId], references: [id], onDelete: Cascade)
+
+  // Threshold and deduction settings
+  completionThreshold Float @default(1) // How many completions before deduction
+  deductionQuantity   Float @default(1) // How much to deduct
+
+  // Store/Location filtering
+  storeId    String?
+  store      Store?    @relation(fields: [storeId], references: [id])
+  storeTagId String? // For outdoor/indoor differentiation
+  storeTag   StoreTag? @relation(fields: [storeTagId], references: [id])
+
+  // Additional bill context filters
+  billContext BillContext? // OUTDOOR, INDOOR, ALL
+
+  isActive    Boolean @default(true)
+  description String? // User-friendly description
+
+  // Relations
+  diagnosticId String
+  diagnostic   Diagnostic @relation(fields: [diagnosticId], references: [id], onDelete: Cascade)
+  userId       String?
+  user         User?      @relation(fields: [userId], references: [id])
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt()
+  deletedAt DateTime?
+
+  // Track consumption for this setting
+  consumptionTrackers ItemConsumptionTracker[]
+
+  // Branch and Department Relations (NEW)
+  branch       Branch?     @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  branchId     String?
+  department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  departmentId String?
+
+  @@unique([itemId, triggerType, testId, operationId, storeId, storeTagId])
+  @@index([itemId])
+  @@index([triggerType])
+  @@index([testId])
+  @@index([operationId])
+  @@index([diagnosticId])
+  @@index([isActive])
+  @@index([deletedAt])
+  @@index([diagnosticId, branchId, departmentId])
+}
+
+// Unified consumption tracking for all trigger types
+model ItemConsumptionTracker {
+  id String @id @default(cuid())
+
+  // Links to the deduction setting
+  settingId String
+  setting   InventoryItemDeductionSetting @relation(fields: [settingId], references: [id], onDelete: Cascade)
+
+  // Current count of completed triggers
+  currentCount Int @default(0)
+
+  // Context tracking
+  storeId String?
+  store   Store?  @relation(fields: [storeId], references: [id])
+
+  // When was this last updated/reset
+  lastUpdated DateTime  @default(now())
+  lastReset   DateTime?
+  updatedAt   DateTime  @default(now()) @updatedAt // add default value of now 
+
+  // Relations
+  diagnosticId String
+  diagnostic   Diagnostic @relation(fields: [diagnosticId], references: [id], onDelete: Cascade)
+
+  // Track trigger events and deductions
+  triggerEvents TriggerEvent[]
+
+  // Branch and Department Relations (NEW)
+  branch       Branch?     @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  branchId     String?
+  department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  departmentId String?
+
+  @@unique([settingId, storeId])
+  @@index([settingId])
+  // @@index([diagnosticId])
+  @@index([currentCount])
+  @@index([diagnosticId, branchId, departmentId])
+}
+
+// Combined model: Track trigger events and handle deductions in one place
+model TriggerEvent {
+  id String @id @default(cuid())
+
+  // Which tracker this belongs to
+  trackerId String
+  tracker   ItemConsumptionTracker @relation(fields: [trackerId], references: [id], onDelete: Cascade)
+
+  // What triggered this event
+  triggerType TriggerType
+
+  // Entity references (based on trigger type)
+  testId String?
+  test   Test?   @relation(fields: [testId], references: [id])
+
+  operationId String?
+  operation   Operation? @relation(fields: [operationId], references: [id])
+
+  // Event context
+  storeId String?
+  store   Store?  @relation(fields: [storeId], references: [id])
+
+  triggeredAt DateTime @default(now())
+  updatedAt   DateTime @default(now()) @updatedAt // add default value of now 
+  countAfter  Int // Counter value after this trigger
+
+  // Deduction execution details (if deduction occurred)
+  wasDeductionTriggered Boolean @default(false)
+  quantityDeducted      Float?
+  fromStoreId           String?
+  fromStore             Store?  @relation("DeductionFromStore", fields: [fromStoreId], references: [id])
+
+  // Link to actual inventory transaction (if deduction successful)
+  transactionId String?
+  transaction   InventoryTransaction? @relation(fields: [transactionId], references: [id])
+
+  // Execution status
+  deductionSuccess Boolean? // true = success, false = failed, null = no deduction attempted
+  errorMessage     String?
+  notes            String?
+
+  // Relations
+  diagnosticId String
+  diagnostic   Diagnostic @relation(fields: [diagnosticId], references: [id], onDelete: Cascade)
+  userId       String?
+  user         User?      @relation(fields: [userId], references: [id])
+
+  // Branch and Department Relations (NEW)
+  branch       Branch?     @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  branchId     String?
+  department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  departmentId String?
+
+  @@index([trackerId])
+  @@index([triggerType])
+  @@index([triggeredAt])
+  @@index([diagnosticId])
+  @@index([testId])
+  @@index([operationId])
+  @@index([wasDeductionTriggered])
+  @@index([deductionSuccess])
+  @@index([diagnosticId, branchId, departmentId])
+}
+
+// Enums for deduction system
+enum TriggerType {
+  TEST_COMPLETION // Regular test completed (BillTest.reportStatus = COMPLETED)
+  OPERATION // Operation/surgery performed  
+  OUTDOOR_BILL // Test in outdoor bill
+  CUSTOM
+}
+
+enum BillContext {
+  OUTDOOR
+  INDOOR
+  LAB
+}
+
+// Junction table for user-store access control
+model UserInventoryStore {
+  id String @id @default(cuid())
+
+  // Relations
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+
+  store   Store  @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  storeId String
+
+  diagnostic   Diagnostic @relation(fields: [diagnosticId], references: [id], onDelete: Cascade)
+  diagnosticId String
+
+  branch       Branch?     @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  branchId     String?
+  department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  departmentId String?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@unique([userId, storeId, diagnosticId])
+  @@index([userId])
+  @@index([storeId])
+  @@index([diagnosticId])
+  @@index([deletedAt])
+  @@index([diagnosticId, branchId, departmentId])
+}

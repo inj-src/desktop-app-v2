@@ -1,0 +1,11 @@
+{
+  "builtAt": "2026-02-20T00:53:58.446Z",
+  "backend": {
+    "branch": "localization",
+    "commit": "b9d9bd4"
+  },
+  "frontend": {
+    "branch": "staging",
+    "commit": "d2182251"
+  }
+}

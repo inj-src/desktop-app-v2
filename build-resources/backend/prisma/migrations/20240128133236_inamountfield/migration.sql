@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "HospitalBill" ADD COLUMN     "paidInAmount" DOUBLE PRECISION NOT NULL DEFAULT 0;

@@ -1,0 +1,70 @@
+<html lang='en'>
+
+  <head>
+    <meta charset='UTF-8' />
+    <meta name='viewport' content='width=device-width, initial-scale=1.0' />
+    <title>Doctor Change Notification - Sastho Tech</title>
+  </head>
+
+  <body style='font-family: Arial, sans-serif; background-color: #f4f4f4; margin: 0; padding: 0;'>
+    <table
+      style='width: 100%; max-width: 600px; margin: 0 auto; background-color: #ffffff; padding: 20px; border-radius: 10px; box-shadow: 0px 0px 10px 0px rgba(0, 0, 0, 0.1);'
+    >
+      <tr>
+        <td style='text-align: center; padding: 20px;'>
+          <h1 style='color: #007bff; font-size: 24px; margin-bottom: 20px;'>Doctor Change
+            Notification</h1>
+          <div
+            style='text-align: left; padding: 15px; background-color: #f8f9fa; border-radius: 5px;'
+          >
+            <h2 style='color: #495057; font-size: 18px; margin-bottom: 15px;'>Change Details:</h2>
+            <ul style='list-style: none; padding: 0; margin: 0;'>
+              <li style='margin-bottom: 10px;'><strong>Operation Type:</strong>
+                {{operationName}}</li>
+              <li style='margin-bottom: 10px;'><strong>Doctor ID:</strong>
+                {{doctorUniqueId}}</li>
+              <li style='margin-bottom: 10px;'><strong>Doctor Name:</strong>
+                {{doctorName}}</li>
+              <li style='margin-bottom: 10px;'><strong>Doctor Designation:</strong>
+                {{doctorDesignation}}</li>
+              <li style='margin-bottom: 10px;'><strong>Diagnostic ID:</strong>
+                {{diagnosticId}}</li>
+              <li style='margin-bottom: 10px;'><strong>Diagnostic Name:</strong>
+                {{diagnosticName}}</li>
+              <li style='margin-bottom: 10px;'><strong>Status:</strong>
+                {{#if isApproved}}Approved{{else}}Pending Approval{{/if}}</li>
+              {{#if previousDoctorName}}
+                <li style='margin-bottom: 10px;'><strong>Previous Doctor:</strong>
+                  {{previousDoctorName}}</li>
+              {{/if}}
+              {{#if previousDesignation}}
+                <li style='margin-bottom: 10px;'><strong>Previous Designation:</strong>
+                  {{previousDesignation}}</li>
+              {{/if}}
+              <li style='margin-bottom: 10px;'><strong>Change Date:</strong>
+                {{createdAt}}</li>
+            </ul>
+          </div>
+          <div
+            style='margin-top: 20px; padding: 15px; background-color: #e9ecef; border-radius: 5px;'
+          >
+            <p style='color: #6c757d; margin: 0;'>This change requires administrative review. Please
+              take appropriate action through the admin dashboard.</p>
+            {{#unless hasActionTaken}}
+              <a
+                href='{{adminDashboardUrl}}'
+                style='display: inline-block; margin-top: 15px; padding: 10px 20px; background-color: #007bff; color: #ffffff; text-decoration: none; border-radius: 5px;'
+              >Review Change</a>
+            {{/unless}}
+          </div>
+        </td>
+      </tr>
+      <tr>
+        <td style='text-align: center; padding-top: 20px; color: #6c757d; font-size: 12px;'>
+          <p>This is an automated notification from Shastho Tech. Please do not reply to this email.</p>
+        </td>
+      </tr>
+    </table>
+  </body>
+
+</html>

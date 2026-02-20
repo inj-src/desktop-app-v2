@@ -1,0 +1,499 @@
+// Department and Branch Management Models
+
+// Branch Model - organizational units under diagnostic/hospital
+model Branch {
+  id            String  @id @default(cuid())
+  code          String // "BR01", "BR02", "MAIN"
+  name          String // "Main Branch", "City Branch"
+  description   String?
+  address       String?
+  phone         String?
+  email         String?
+  isActive      Boolean @default(true)
+  color         String?
+  icon          String?
+  displayOrder  Int     @default(0)
+  sidebarConfig Json?   @default("{}")
+
+  diagnostic   Diagnostic @relation(fields: [diagnosticId], references: [id], onDelete: Cascade)
+  diagnosticId String
+
+  // Relations
+  departments           Department[]
+  branchManagers        BranchManager[]
+  branchServices        BranchService[]
+  branchServicesPricing BranchServicePricing[]
+  employees             Employee[]
+  bills                 Bill[]
+  hospitalBills         HospitalBill[]
+  appointments          DoctorAppointment[]
+
+  createdAt                             DateTime                                @default(now())
+  updatedAt                             DateTime                                @updatedAt
+  deletedAt                             DateTime?
+  DoctorChamber                         DoctorChamber[]
+  Slot                                  Slot[]
+  DoctorSession                         DoctorSession[]
+  DoctorSessionHistory                  DoctorSessionHistory[]
+  SessionNotice                         SessionNotice[]
+  MissedQueueLog                        MissedQueueLog[]
+  ReportQueue                           ReportQueue[]
+  Document                              Document[]
+  Attendance                            Attendance[]
+  Leave                                 Leave[]
+  LeaveType                             LeaveType[]
+  LeavePolicy                           LeavePolicy[]
+  Shift                                 Shift[]
+  EmployeeShift                         EmployeeShift[]
+  FingerprintDevice                     FingerprintDevice[]
+  AttendanceLog                         AttendanceLog[]
+  Holiday                               Holiday[]
+  SalaryStructure                       SalaryStructure[]
+  EmployeeSalary                        EmployeeSalary[]
+  PayrollPeriod                         PayrollPeriod[]
+  Payslip                               Payslip[]
+  SalaryAdvance                         SalaryAdvance[]
+  AdvanceRepayment                      AdvanceRepayment[]
+  Bonus                                 Bonus[]
+  AllowanceType                         AllowanceType[]
+  DeductionType                         DeductionType[]
+  SalaryRevision                        SalaryRevision[]
+  Store                                 Store[]
+  StoreTag                              StoreTag[]
+  Tag                                   Tag[]
+  InventoryItem                         InventoryItem[]
+  StoreInventoryItems                   StoreInventoryItems[]
+  BillInventoryItem                     BillInventoryItem[]
+  InventoryTransaction                  InventoryTransaction[]
+  InventoryPackage                      InventoryPackage[]
+  InventoryPackageItem                  InventoryPackageItem[]
+  InventoryItemDeductionSetting         InventoryItemDeductionSetting[]
+  ItemConsumptionTracker                ItemConsumptionTracker[]
+  TriggerEvent                          TriggerEvent[]
+  Notification                          Notification[]
+  NotificationPreference                NotificationPreference[]
+  ScheduledSummaryConfig                ScheduledSummaryConfig[]
+  HospitalServiceVersion                HospitalServiceVersion[]
+  Doctor                                Doctor[]
+  DoctorUpdateInfo                      DoctorUpdateInfo[]
+  PC                                    PC[]
+  PCGroup                               PCGroup[]
+  PCGroupMember                         PCGroupMember[]
+  TestCategory                          TestCategory[]
+  PCTestCategoryPercentage              PCTestCategoryPercentage[]
+  PCTestPercentage                      PCTestPercentage[]
+  DoctorTestCategoryPercentage          DoctorTestCategoryPercentage[]
+  DoctorTestPercentage                  DoctorTestPercentage[]
+  Commission                            Commission[]
+  Test                                  Test[]
+  Accessory                             Accessory[]
+  TestAccessories                       TestAccessories[]
+  TestTemplate                          TestTemplate[]
+  Lab                                   Lab[]
+  Patient                               Patient[]
+  BillTest                              BillTest[]
+  BillAccessory                         BillAccessory[]
+  DailyExpenseCategory                  DailyExpenseCategory[]
+  DailyExpense                          DailyExpense[]
+  MonthlyExpenseCategory                MonthlyExpenseCategory[]
+  MonthlyExpense                        MonthlyExpense[]
+  DailyIncomeCategory                   DailyIncomeCategory[]
+  DailyExtraIncome                      DailyExtraIncome[]
+  Service                               Service[]
+  Nurse                                 Nurse[]
+  DiscountReferrer                      DiscountReferrer[]
+  HospitalBillService                   HospitalBillService[]
+  Signatures                            Signatures[]
+  SubTestCategory                       SubTestCategory[]
+  ServiceChargeTrx                      ServiceChargeTrx[]
+  OperationCategory                     OperationCategory[]
+  Operation                             Operation[]
+  SurgeonOperation                      SurgeonOperation[]
+  OperationCategoryBreakdownFeeTemplate OperationCategoryBreakdownFeeTemplate[]
+  OperationBreakdownFee                 OperationBreakdownFee[]
+  SurgeonOperationBreakdownFee          SurgeonOperationBreakdownFee[]
+  Surgeon                               Surgeon[]
+  SurgeonOperationFee                   SurgeonOperationFee[]
+  Anesthesiologist                      Anesthesiologist[]
+  AnesthesiologistOperationFee          AnesthesiologistOperationFee[]
+  BedCategory                           BedCategory[]
+  BedSubCategory                        BedSubCategory[]
+  Bed                                   Bed[]
+  BedBooking                            BedBooking[]
+  SurgeonOperationTrx                   SurgeonOperationTrx[]
+  ServiceVersion                        ServiceVersion[]
+  patientFollowups                      patientFollowups[]
+  PatientFollowupHistory                PatientFollowupHistory[]
+  Message                               Message[]
+  SMSTemplate                           SMSTemplate[]
+  SMSPackagePurchase                    SMSPackagePurchase[]
+  TemplateCategory                      TemplateCategory[]
+  DiagnosticTemplate                    DiagnosticTemplate[]
+  userInventoryStores                   UserInventoryStore[]
+
+  @@unique([code, diagnosticId, deletedAt])
+  @@index([diagnosticId])
+  @@index([isActive])
+  @@index([diagnosticId, isActive])
+}
+
+// Branch Manager - manages entire branch
+model BranchManager {
+  id String @id @default(cuid())
+
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId String   @unique
+
+  user User?
+
+  branch   Branch @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  branchId String
+
+  // Granular permissions for branch-level operations
+  canManageDepartments Boolean @default(true)
+  canManageServices    Boolean @default(true)
+  canManagePricing     Boolean @default(true)
+  canViewReports       Boolean @default(true)
+  canManageEmployees   Boolean @default(false)
+  canApproveBills      Boolean @default(true)
+
+  assignedBy   User?    @relation(name: "BranchManagerAssignedByUser", fields: [assignedById], references: [id], onDelete: SetNull)
+  assignedById String?
+  assignedAt   DateTime @default(now())
+
+  diagnostic   Diagnostic @relation(fields: [diagnosticId], references: [id], onDelete: Cascade)
+  diagnosticId String
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@unique([employeeId, branchId, deletedAt])
+  @@index([branchId])
+  @@index([employeeId])
+  @@index([diagnosticId])
+}
+
+// Department Model - departments within branches
+model Department {
+  id            String  @id @default(cuid())
+  code          String // "CARD", "NEUR", "ORTH"
+  name          String // "Cardiology", "Neurology", "Orthopedics"
+  description   String?
+  isActive      Boolean @default(true)
+  color         String?
+  icon          String?
+  displayOrder  Int     @default(0)
+  sidebarConfig Json?   @default("{}")
+
+  branch   Branch @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  branchId String
+
+  diagnostic   Diagnostic @relation(fields: [diagnosticId], references: [id], onDelete: Cascade)
+  diagnosticId String
+
+  // Relations
+  managers            DepartmentManager[]
+  fieldConfigurations DepartmentFieldConfiguration[]
+  services            DepartmentService[]
+  servicesPricing     DepartmentServicePricing[]
+  employees           Employee[]
+  bills               Bill[]
+  hospitalBills       HospitalBill[]
+  appointments        DoctorAppointment[]
+
+  createdAt                             DateTime                                @default(now())
+  updatedAt                             DateTime                                @updatedAt
+  deletedAt                             DateTime?
+  DoctorChamber                         DoctorChamber[]
+  Slot                                  Slot[]
+  DoctorSession                         DoctorSession[]
+  DoctorSessionHistory                  DoctorSessionHistory[]
+  SessionNotice                         SessionNotice[]
+  MissedQueueLog                        MissedQueueLog[]
+  ReportQueue                           ReportQueue[]
+  Document                              Document[]
+  Attendance                            Attendance[]
+  Leave                                 Leave[]
+  LeaveType                             LeaveType[]
+  LeavePolicy                           LeavePolicy[]
+  Shift                                 Shift[]
+  EmployeeShift                         EmployeeShift[]
+  FingerprintDevice                     FingerprintDevice[]
+  AttendanceLog                         AttendanceLog[]
+  Holiday                               Holiday[]
+  SalaryStructure                       SalaryStructure[]
+  EmployeeSalary                        EmployeeSalary[]
+  PayrollPeriod                         PayrollPeriod[]
+  Payslip                               Payslip[]
+  SalaryAdvance                         SalaryAdvance[]
+  AdvanceRepayment                      AdvanceRepayment[]
+  Bonus                                 Bonus[]
+  AllowanceType                         AllowanceType[]
+  DeductionType                         DeductionType[]
+  SalaryRevision                        SalaryRevision[]
+  Store                                 Store[]
+  StoreTag                              StoreTag[]
+  Tag                                   Tag[]
+  InventoryItem                         InventoryItem[]
+  StoreInventoryItems                   StoreInventoryItems[]
+  BillInventoryItem                     BillInventoryItem[]
+  InventoryTransaction                  InventoryTransaction[]
+  InventoryPackage                      InventoryPackage[]
+  InventoryPackageItem                  InventoryPackageItem[]
+  InventoryItemDeductionSetting         InventoryItemDeductionSetting[]
+  ItemConsumptionTracker                ItemConsumptionTracker[]
+  TriggerEvent                          TriggerEvent[]
+  Notification                          Notification[]
+  NotificationPreference                NotificationPreference[]
+  ScheduledSummaryConfig                ScheduledSummaryConfig[]
+  HospitalServiceVersion                HospitalServiceVersion[]
+  Doctor                                Doctor[]
+  DoctorUpdateInfo                      DoctorUpdateInfo[]
+  PC                                    PC[]
+  PCGroup                               PCGroup[]
+  PCGroupMember                         PCGroupMember[]
+  TestCategory                          TestCategory[]
+  PCTestCategoryPercentage              PCTestCategoryPercentage[]
+  PCTestPercentage                      PCTestPercentage[]
+  DoctorTestCategoryPercentage          DoctorTestCategoryPercentage[]
+  DoctorTestPercentage                  DoctorTestPercentage[]
+  Commission                            Commission[]
+  Test                                  Test[]
+  Accessory                             Accessory[]
+  TestAccessories                       TestAccessories[]
+  TestTemplate                          TestTemplate[]
+  Lab                                   Lab[]
+  Patient                               Patient[]
+  BillTest                              BillTest[]
+  BillAccessory                         BillAccessory[]
+  DailyExpenseCategory                  DailyExpenseCategory[]
+  DailyExpense                          DailyExpense[]
+  MonthlyExpenseCategory                MonthlyExpenseCategory[]
+  MonthlyExpense                        MonthlyExpense[]
+  DailyIncomeCategory                   DailyIncomeCategory[]
+  DailyExtraIncome                      DailyExtraIncome[]
+  Service                               Service[]
+  Nurse                                 Nurse[]
+  DiscountReferrer                      DiscountReferrer[]
+  HospitalBillService                   HospitalBillService[]
+  Signatures                            Signatures[]
+  SubTestCategory                       SubTestCategory[]
+  ServiceChargeTrx                      ServiceChargeTrx[]
+  OperationCategory                     OperationCategory[]
+  Operation                             Operation[]
+  SurgeonOperation                      SurgeonOperation[]
+  OperationCategoryBreakdownFeeTemplate OperationCategoryBreakdownFeeTemplate[]
+  OperationBreakdownFee                 OperationBreakdownFee[]
+  SurgeonOperationBreakdownFee          SurgeonOperationBreakdownFee[]
+  Surgeon                               Surgeon[]
+  SurgeonOperationFee                   SurgeonOperationFee[]
+  Anesthesiologist                      Anesthesiologist[]
+  AnesthesiologistOperationFee          AnesthesiologistOperationFee[]
+  BedCategory                           BedCategory[]
+  BedSubCategory                        BedSubCategory[]
+  Bed                                   Bed[]
+  BedBooking                            BedBooking[]
+  SurgeonOperationTrx                   SurgeonOperationTrx[]
+  ServiceVersion                        ServiceVersion[]
+  patientFollowups                      patientFollowups[]
+  PatientFollowupHistory                PatientFollowupHistory[]
+  Message                               Message[]
+  SMSTemplate                           SMSTemplate[]
+  SMSPackagePurchase                    SMSPackagePurchase[]
+  TemplateCategory                      TemplateCategory[]
+  DiagnosticTemplate                    DiagnosticTemplate[]
+  userInventoryStores                   UserInventoryStore[]
+
+  @@unique([code, branchId, deletedAt])
+  @@index([branchId])
+  @@index([diagnosticId])
+  @@index([isActive])
+  @@index([branchId, isActive])
+}
+
+// Department Manager - manages specific department
+model DepartmentManager {
+  id String @id @default(cuid())
+
+  user       User?
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId String   @unique
+
+  department   Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  departmentId String
+
+  // Granular permissions for department-level operations
+  canManageFieldConfig Boolean @default(true)
+  canManageServices    Boolean @default(true)
+  canManagePricing     Boolean @default(true)
+  canViewReports       Boolean @default(true)
+  canManageEmployees   Boolean @default(false)
+
+  assignedBy   User?    @relation(name: "DepartmentManagerAssignedByUser", fields: [assignedById], references: [id], onDelete: SetNull)
+  assignedById String?
+  assignedAt   DateTime @default(now())
+
+  diagnostic   Diagnostic @relation(fields: [diagnosticId], references: [id], onDelete: Cascade)
+  diagnosticId String
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@unique([employeeId, departmentId, deletedAt])
+  @@index([departmentId])
+  @@index([employeeId])
+  @@index([diagnosticId])
+}
+
+// Field Configuration - department-specific field customization
+model DepartmentFieldConfiguration {
+  id String @id @default(cuid())
+
+  department   Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  departmentId String
+
+  formType FormType // OUTDOOR_BILL, INDOOR_BILL, APPOINTMENT
+
+  // JSON structure: { fieldName: { label: string, visible: boolean, required: boolean, order: number } }
+  // Example: { "name": { "label": "Patient Full Name", "visible": true, "required": true, "order": 1 } }
+  fieldConfig Json @default("{}")
+
+  diagnostic   Diagnostic @relation(fields: [diagnosticId], references: [id], onDelete: Cascade)
+  diagnosticId String
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@unique([departmentId, formType, deletedAt])
+  @@index([departmentId])
+  @@index([formType])
+  @@index([diagnosticId])
+}
+
+// Form Type Enum
+enum FormType {
+  OUTDOOR_BILL
+  INDOOR_BILL
+  APPOINTMENT
+}
+
+// Branch Service - services available at branch level
+model BranchService {
+  id String @id @default(cuid())
+
+  branch   Branch @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  branchId String
+
+  service   Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  serviceId String
+
+  isActive     Boolean @default(true)
+  displayOrder Int     @default(0)
+
+  diagnostic   Diagnostic @relation(fields: [diagnosticId], references: [id], onDelete: Cascade)
+  diagnosticId String
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@unique([branchId, serviceId, deletedAt])
+  @@index([branchId])
+  @@index([serviceId])
+  @@index([diagnosticId])
+  @@index([branchId, isActive])
+}
+
+// Branch Service Pricing - branch-level pricing overrides
+model BranchServicePricing {
+  id String @id @default(cuid())
+
+  branch   Branch @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  branchId String
+
+  service   Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  serviceId String
+
+  price        Float // Overrides Service.price for this branch
+  discountType String @default("percentage")
+  discount     Float  @default(0)
+
+  effectiveFrom DateTime  @default(now())
+  effectiveTo   DateTime?
+
+  diagnostic   Diagnostic @relation(fields: [diagnosticId], references: [id], onDelete: Cascade)
+  diagnosticId String
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@unique([branchId, serviceId, deletedAt])
+  @@index([branchId])
+  @@index([serviceId])
+  @@index([diagnosticId])
+  @@index([effectiveFrom, effectiveTo])
+  @@index([branchId, serviceId, effectiveFrom, effectiveTo])
+}
+
+// Department Service - services available at department level
+model DepartmentService {
+  id String @id @default(cuid())
+
+  department   Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  departmentId String
+
+  service   Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  serviceId String
+
+  isActive     Boolean @default(true)
+  displayOrder Int     @default(0)
+
+  diagnostic   Diagnostic @relation(fields: [diagnosticId], references: [id], onDelete: Cascade)
+  diagnosticId String
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@unique([departmentId, serviceId, deletedAt])
+  @@index([departmentId])
+  @@index([serviceId])
+  @@index([diagnosticId])
+  @@index([departmentId, isActive])
+}
+
+// Department Service Pricing - department-specific pricing (highest priority)
+model DepartmentServicePricing {
+  id String @id @default(cuid())
+
+  department   Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  departmentId String
+
+  service   Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  serviceId String
+
+  price        Float // Overrides branch/base price for this department
+  discountType String @default("percentage")
+  discount     Float  @default(0)
+
+  effectiveFrom DateTime  @default(now())
+  effectiveTo   DateTime?
+
+  diagnostic   Diagnostic @relation(fields: [diagnosticId], references: [id], onDelete: Cascade)
+  diagnosticId String
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@unique([departmentId, serviceId, deletedAt])
+  @@index([departmentId])
+  @@index([serviceId])
+  @@index([diagnosticId])
+  @@index([effectiveFrom, effectiveTo])
+  @@index([departmentId, serviceId, effectiveFrom, effectiveTo])
+}

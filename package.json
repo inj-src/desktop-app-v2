@@ -34,27 +34,38 @@
   "build": {
     "appId": "com.sasthotech.desktopv2",
     "productName": "SasthoTech Desktop V2",
+    "compression": "maximum",
+    "electronLanguages": [
+      "en-US"
+    ],
     "asar": true,
     "asarUnpack": [
-      "**/node_modules/@prisma/**",
-      "**/node_modules/.prisma/**",
-      "**/backend/**/node_modules/@prisma/**",
-      "**/backend/**/node_modules/.prisma/**",
       "**/node_modules/@electric-sql/pglite/**",
       "**/node_modules/@electric-sql/pglite-socket/**"
     ],
     "files": [
       "build/**/*",
-      "package.json"
+      "package.json",
+      "!**/*.map"
     ],
     "extraResources": [
       {
         "from": "build-resources/backend",
-        "to": "backend"
+        "to": "backend",
+        "filter": [
+          "**/*",
+          "!**/*.map",
+          "!**/.DS_Store"
+        ]
       },
       {
         "from": "build-resources/frontend",
-        "to": "frontend"
+        "to": "frontend",
+        "filter": [
+          "**/*",
+          "!**/*.map",
+          "!**/.DS_Store"
+        ]
       }
     ],
     "directories": {

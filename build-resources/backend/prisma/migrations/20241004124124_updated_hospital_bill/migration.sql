@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "HospitalBill" ADD COLUMN     "advanceInFeeTotal" INTEGER NOT NULL DEFAULT 0,
+ADD COLUMN     "paidInAmountTotal" DOUBLE PRECISION NOT NULL DEFAULT 0;

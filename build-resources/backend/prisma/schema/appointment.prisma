@@ -1,0 +1,425 @@
+model DoctorChamber {
+  id                       String  @id @default(cuid())
+  uniqueId                 String?
+  room                     String?
+  phone                    String?
+  timeInterval             Int     @default(5) //must be in minutes
+  oldPatientFee            Int     @default(0)
+  newPatientFee            Int     @default(0)
+  followUpFee              Int     @default(0) //fee for follow-up visits within the followUpPeriodDays
+  renewalPeriodDays        Int     @default(30) //days after which a returning patient is considered new again
+  followupPeriodDays       Int     @default(7) //days within which a follow-up visit has special handling
+  prescriptionDoctorId     String?
+  prescriptionHospitalId   String?
+  // Reserved serial settings
+  enableReservedSerials    Boolean @default(false) // enable reserved serial functionality
+  reservedSerialStrategies Json    @default("[]") // array of reservation strategy objects
+
+  queueDisplaySettings Json  @default("{}") // settings for queue display board
+  marketingConfig      Json? // marketing display config (doctor profile, promo slides, etc.)
+
+  missedQueueConfig MissedQueueStrategyType @default(MANUAL)
+  missedQueueX      Int                     @default(0) // if it is chosen to Serial_count_based or Completed_count_based, this will hold the X value
+  Diagnostic        Diagnostic              @relation(fields: [diagnosticId], references: [id], onDelete: Cascade)
+  diagnosticId      String
+  Doctor            Doctor                  @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  doctorId          String
+  User              User?                   @relation(fields: [userId], references: [id], onDelete: SetNull)
+  userId            String?
+  slots             Slot[]
+  createdAt         DateTime                @default(now())
+  deletedAt         DateTime?
+  updatedAt         DateTime                @default(now()) @updatedAt()
+  appointments      DoctorAppointment[]
+  sessions          DoctorSession[]
+  missedQueueLogs   MissedQueueLog[]
+  reportQueues      ReportQueue[]
+
+  // Branch and Department Relations (NEW)
+  branch       Branch?     @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  branchId     String?
+  department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  departmentId String?
+
+  @@unique([diagnosticId, doctorId, deletedAt])
+  @@unique([diagnosticId, userId, doctorId, deletedAt])
+  // @@unique([diagnosticId, uniqueId])
+  @@index([doctorId, diagnosticId])
+  @@index([userId, diagnosticId])
+  @@index([diagnosticId])
+  @@index([diagnosticId, branchId, departmentId])
+}
+
+enum MissedQueueStrategyType {
+  ORDER_IN_LAST
+  SERIAL_COUNT_BASED
+  COMPLETED_COUNT_BASED
+  MANUAL
+}
+
+model Slot {
+  id                   String              @id @default(cuid())
+  dayIds               Int[] //0-6
+  slotName             String?
+  startTime            DateTime
+  endTime              DateTime
+  maxAppointmentNumber Int                 @default(0)
+  reserveAppointment   Int                 @default(0)
+  doctorChamber        DoctorChamber       @relation(fields: [doctorChamberId], references: [id])
+  doctorChamberId      String
+  Diagnostic           Diagnostic          @relation(fields: [diagnosticId], references: [id], onDelete: Cascade)
+  diagnosticId         String
+  createdAt            DateTime            @default(now())
+  deletedAt            DateTime?
+  updatedAt            DateTime            @default(now()) @updatedAt()
+  appointments         DoctorAppointment[]
+  sessions             DoctorSession[]
+  missedQueueLogs      MissedQueueLog[]
+  reportQueues         ReportQueue[]
+
+  // Branch and Department Relations (NEW)
+  branch       Branch?     @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  branchId     String?
+  department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  departmentId String?
+
+  @@index([doctorChamberId])
+  @@index([diagnosticId])
+  @@index([diagnosticId, branchId, departmentId])
+}
+
+model DoctorAppointment {
+  id                String            @id @default(cuid())
+  slot              Slot              @relation(fields: [slotId], references: [id])
+  slotId            String
+  src               AppointmentSource @default(APP_ONLINE)
+  serialNo          String
+  fullSerial        String            @default("") // this includes the serial number and doctorUniqueId e.g: a1, a2, b1, b2 etc
+  queuePosition     Int               @default(0) // position in the queue, 0 means not in queue yet
+  timeOf            DateTime // initial scheduled time
+  expectedStartTime DateTime?
+  expectedEndTime   DateTime?
+  actualStartTime   DateTime?
+  actualEndTime     DateTime?
+  isDelayed         Boolean           @default(false)
+  delayReason       String?
+  numOfMsgs         Int               @default(0)
+  status            AppointmentStatus @default(PENDING)
+  type              AppointmentType   @default(FIRST_VISIT) // whether patient is new or old or come for report showing only
+  label             AppointmentLabel  @default(GENERAL)
+  isReservedSerial  Boolean           @default(false) // true if this serial is reserved for admin
+  isVacant          Boolean           @default(false) // true if this appointment is vacant and can be booked by anyone
+
+  //  Payment related field
+  fee             Int       @default(0)
+  totalTestFee    Int       @default(0) // total fee of all tests done in this appointment
+  discount        Int       @default(0) // any discount applied to the fee
+  discountType    String    @default("percentage")
+  finalFee        Int       @default(0) // actual fee charged for this appointment
+  isPaid          Boolean   @default(false)
+  paidAmount      Int       @default(0) // amount paid so far
+  isFeeIncluded   Boolean   @default(true) // true if the chamber fee is included in the finalFee
+  lastPaymentDate DateTime?
+  fullPaymentDate DateTime?
+
+  cancelReason    String?
+  notes           Json?
+  durationMinutes Int       @default(0) // actual duration of appointment
+  waitTimeMinutes Int       @default(0) // how long patient waited
+  patientRating   Int? // patient feedback (1-5)
+  patientFeedback String? // patient comments
+  createdAt       DateTime  @default(now())
+  deletedAt       DateTime?
+
+  // Relations to external fields
+
+  vacancyReason String? // reason for vacancy if appointment is vacant
+
+  // this is needed to track rescheduled appointments
+  originalAppointmentId   String? // if this appointment is a rescheduled one, this will hold the original appointment id
+  originalAppointment     DoctorAppointment?  @relation("RescheduledAppointment", fields: [originalAppointmentId], references: [id])
+  rescheduledAppointments DoctorAppointment[] @relation("RescheduledAppointment")
+
+  // pc related fields
+  isPcPaid      Boolean?  @default(false) // true if this appointment is paid by PC
+  pcAmount      Int?      @default(0) // amount paid by PC for this appointment
+  pcPaymentDate DateTime? // date when PC paid for this appointment
+  pCId          String? // if this appointment is paid by PC, this will hold the PC id
+  pc            PC?       @relation(fields: [pCId], references: [id])
+
+  // Branch and Department Relations (NEW)
+  branch       Branch?     @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  branchId     String?
+  department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  departmentId String?
+
+  patient         Patient?       @relation(fields: [patientId], references: [id])
+  patientId       String?
+  updatedAt       DateTime       @default(now()) @updatedAt()
+  doctorChamber   DoctorChamber  @relation(fields: [doctorChamberId], references: [id])
+  doctorChamberId String
+  Diagnostic      Diagnostic     @relation(fields: [diagnosticId], references: [id], onDelete: Cascade)
+  diagnosticId    String
+  User            User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
+  userId          String?
+  sessionId       String?
+  session         DoctorSession? @relation(fields: [sessionId], references: [id])
+  messages        Message[]
+  reportQueues    ReportQueue[]
+  tests           BillTest[]
+
+  @@unique([slotId, timeOf, deletedAt])
+  @@unique([slotId, serialNo, timeOf, deletedAt])
+  @@index([serialNo])
+  @@index([slotId])
+  @@index([userId])
+  @@index([patientId])
+  @@index([diagnosticId, doctorChamberId, slotId])
+  @@index([diagnosticId, timeOf])
+  @@index([status])
+  @@index([diagnosticId, doctorChamberId, timeOf, deletedAt]) // Most common filter combination
+  @@index([diagnosticId, status, timeOf]) // Status-based queries with date
+  @@index([patientId, timeOf]) // Patient appointment history
+  @@index([status, timeOf]) // Queue management queries
+  @@index([doctorChamberId, timeOf, status]) // Doctor-specific appointment lists
+  @@index([isPaid, finalFee]) // Payment tracking queries
+  @@index([type, timeOf]) // First/old visit filtering
+  @@index([label, timeOf]) // Reserved/general appointment queries
+  @@index([pCId, pcPaymentDate])
+  @@index([serialNo, timeOf]) // Index for PC related queries
+  @@index([pCId])
+  @@index([diagnosticId, branchId, departmentId])
+}
+
+model DoctorSession {
+  id                               String                 @id @default(cuid())
+  doctorChamberId                  String
+  doctorChamber                    DoctorChamber          @relation(fields: [doctorChamberId], references: [id])
+  slotId                           String
+  slot                             Slot                   @relation(fields: [slotId], references: [id])
+  diagnosticId                     String
+  Diagnostic                       Diagnostic             @relation(fields: [diagnosticId], references: [id], onDelete: Cascade)
+  date                             DateTime
+  startTime                        DateTime
+  endTime                          DateTime?
+  actualStartTime                  DateTime?
+  actualEndTime                    DateTime?
+  currentDelayInMinutes            Int                    @default(0) // current delay in minutes
+  isOnBreak                        Boolean                @default(false)
+  breakStartTime                   DateTime?
+  estimatedBreakEnd                DateTime?
+  averageConsultationTimeInMinutes Int?                   @default(10)
+  status                           DoctorSessionStatus    @default(SCHEDULED)
+  appointments                     DoctorAppointment[]
+  history                          DoctorSessionHistory[]
+  reportQueues                     ReportQueue[]
+  notices                          SessionNotice[]
+  missedQueueLogs                  MissedQueueLog[]
+  createdAt                        DateTime               @default(now())
+  updatedAt                        DateTime               @default(now()) @updatedAt()
+  deletedAt                        DateTime?
+
+  // Branch and Department Relations (NEW)
+  branch       Branch?     @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  branchId     String?
+  department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  departmentId String?
+
+  @@unique([doctorChamberId, slotId, date, deletedAt])
+  // add history tracking if needed in future
+  @@index([doctorChamberId])
+  @@index([slotId])
+  @@index([date])
+  @@index([status])
+  @@index([diagnosticId, branchId, departmentId])
+}
+
+model DoctorSessionHistory {
+  id              String        @id @default(cuid())
+  doctorSessionId String
+  doctorSession   DoctorSession @relation(fields: [doctorSessionId], references: [id], onDelete: Cascade)
+  diagnosticId    String
+  Diagnostic      Diagnostic    @relation(fields: [diagnosticId], references: [id], onDelete: Cascade)
+  action          String // e.g., "STARTED", "ENDED", "BREAK_STARTED", "BREAK_ENDED", "DELAY_UPDATED"
+  timestamp       DateTime      @default(now())
+  updatedAt       DateTime      @default(now()) @updatedAt // add default value of now
+  details         Json?
+  userId          String?
+  user            User?         @relation(fields: [userId], references: [id])
+
+  // Branch and Department Relations (NEW)
+  branch       Branch?     @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  branchId     String?
+  department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  departmentId String?
+
+  @@index([diagnosticId, branchId, departmentId])
+}
+
+model SessionNotice {
+  id                           String        @id @default(cuid())
+  doctorSessionId              String
+  doctorSession                DoctorSession @relation(fields: [doctorSessionId], references: [id])
+  diagnosticId                 String
+  Diagnostic                   Diagnostic    @relation(fields: [diagnosticId], references: [id], onDelete: Cascade)
+  type                         NoticeType
+  message                      String
+  startTime                    DateTime
+  endTime                      DateTime?
+  approximateDurationInMinutes Int           @default(0) // approximate duration of the notice in minutes
+  isActive                     Boolean       @default(true)
+  createdBy                    String
+  createdAt                    DateTime      @default(now())
+  updatedAt                    DateTime      @updatedAt
+  deletedAt                    DateTime?
+
+  // Branch and Department Relations (NEW)
+  branch       Branch?     @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  branchId     String?
+  department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  departmentId String?
+
+  @@index([diagnosticId, branchId, departmentId])
+}
+
+// Model for tracking missed queue processing events
+model MissedQueueLog {
+  id                    String    @id @default(cuid())
+  doctorChamberId       String
+  slotId                String
+  doctorSessionId       String
+  diagnosticId          String
+  processedDate         DateTime
+  strategiesUsed        Json // Array of strategies that were used
+  totalProcessed        Int       @default(0)
+  results               Json // Detailed results of the processing
+  lastProcessedPosition String? // For queue position tracking
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  deletedAt             DateTime?
+
+  // Relations
+  doctorChamber DoctorChamber @relation(fields: [doctorChamberId], references: [id], onDelete: Cascade)
+  slot          Slot          @relation(fields: [slotId], references: [id], onDelete: Cascade)
+  doctorSession DoctorSession @relation(fields: [doctorSessionId], references: [id], onDelete: Cascade)
+  diagnostic    Diagnostic    @relation(fields: [diagnosticId], references: [id], onDelete: Cascade)
+
+  // Branch and Department Relations (NEW)
+  branch       Branch?     @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  branchId     String?
+  department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  departmentId String?
+
+  @@index([doctorChamberId, slotId, processedDate])
+  @@index([processedDate])
+  @@index([diagnosticId, branchId, departmentId])
+}
+
+model ReportQueue {
+  id              String            @id @default(cuid())
+  appointmentId   String // Reference to original appointment
+  appointment     DoctorAppointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  doctorChamberId String
+  doctorChamber   DoctorChamber     @relation(fields: [doctorChamberId], references: [id], onDelete: Cascade)
+  slotId          String
+  slot            Slot              @relation(fields: [slotId], references: [id], onDelete: Cascade)
+  sessionId       String
+  session         DoctorSession     @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  diagnosticId    String
+  Diagnostic      Diagnostic        @relation(fields: [diagnosticId], references: [id], onDelete: Cascade)
+  User            User?             @relation(fields: [userId], references: [id], onDelete: SetNull)
+  userId          String?
+
+  deletedBy     String?
+  deletedByUser User?   @relation("ReportQueueDeletedBy", fields: [deletedBy], references: [id], onDelete: SetNull)
+
+  queuePosition Int
+  timeOf        DateTime
+  status        ReportQueueStatus @default(WAITING)
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  deletedAt     DateTime?
+
+  // Branch and Department Relations (NEW)
+  branch       Branch?     @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  branchId     String?
+  department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  departmentId String?
+
+  @@index([sessionId, diagnosticId, deletedAt])
+  @@index([diagnosticId, branchId, departmentId])
+}
+
+enum NoticeType {
+  BREAK
+  EMERGENCY
+  DELAY_NOTICE
+  GENERAL
+  NAMAZ
+  FOOD
+  OTHER
+}
+
+enum ReportQueueStatus {
+  WAITING
+  MISSED
+  ON_GOING
+  COMPLETED
+  CANCELLED
+}
+
+enum AppointmentStatus {
+  ONLINE_RESERVED
+  PENDING
+  BOOKED
+  CONFIRMED
+  ON_GOING
+  COMPLETED
+  CANCELLED
+  MISSED
+  RESERVED
+  VACANT
+  WAITING
+}
+
+enum AppointmentType {
+  FIRST_VISIT
+  OLD_VISIT
+  FOLLOW_UP
+  REPORT_SHOW
+}
+
+enum AppointmentSource {
+  WEBSITE
+  APP_ONLINE
+  APP_OFFLINE
+  RECEPTIONIST_ONLINE
+  RECEPTIONIST_OFFLINE
+  CALL
+}
+
+enum AppointmentLabel {
+  VIP
+  GENERAL
+  PC
+  URGENT
+  RESERVED_SLOT
+}
+
+enum ReservedSerialStrategy {
+  NONE // No reserved serials
+  FIRST_N // Reserve first N serials
+  LAST_N // Reserve last N serials
+  MULTIPLE // Reserve multiples of N (with optional left/right offsets)
+  SPECIFIC // Reserve specific serials
+  RANGE // Reserve a range of serials
+}
+
+enum DoctorSessionStatus {
+  SCHEDULED
+  ACTIVE
+  ON_BREAK
+  DELAYED
+  COMPLETED
+  CANCELLED
+}

@@ -1,0 +1,760 @@
+// Attendance Management Models
+// Employee Model
+model Employee {
+  id         String  @id @default(cuid())
+  employeeId String  @unique
+  name       String
+  password   String?
+  email      String? @unique
+  phone      String?
+
+  // Personal Details
+  dateOfBirth    DateTime?
+  gender         String? // Male, Female, Other
+  employmentType String? // Full-time, Part-time, Contract
+
+  // Address
+  addressLine1 String?
+  addressLine2 String?
+  city         String?
+  state        String?
+  country      String?
+  postalCode   String?
+
+  // Emergency Contact
+  emergencyContactName         String?
+  emergencyContactRelationship String?
+  emergencyContactPhoneNumber  String?
+
+  // Bank Information
+  bankName           String?
+  accountHolderName  String?
+  accountNumber      String?
+  bankIdentifierCode String? // BIC / SWIFT
+  bankBranch         String?
+
+  // Tax Information
+  taxPayerId String?
+
+  // Document IDs (for employee verification)
+  documentsId String? // e.g., NID / Passport / Driving License number
+
+  // Existing fields
+  position                 String?
+  joinDate                 DateTime
+  leftDate                 DateTime?
+  isActive                 Boolean   @default(true)
+  profileImage             String?
+  fingerprintData          String?
+  fingerprintId            String?   @unique
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
+  deletedAt                DateTime?
+  lastLoginTime            DateTime?
+  isEmailVerified          Boolean   @default(false)
+  isPhoneVerified          Boolean   @default(false)
+  verificationCode         String?
+  emailVerificationExpires DateTime? // Expiry for email verification code
+
+  // Branch and Department Relations (NEW)
+  branch   Branch? @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  branchId String?
+
+  department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  departmentId String?
+
+  // Legacy fields for migration safety (keep for 6 months)
+  branchLegacy     String?
+  departmentLegacy String?
+
+  diagnostic   Diagnostic @relation(fields: [diagnosticId], references: [id], onDelete: Cascade)
+  diagnosticId String
+
+  attendances             Attendance[]
+  leaves                  Leave[]
+  shifts                  EmployeeShift[]
+  salaries                EmployeeSalary[]
+  salaryAdvances          SalaryAdvance[]
+  bonuses                 Bonus[]
+  salaryRevisions         SalaryRevision[]
+  paySlips                Payslip[]
+  notifications           Notification[]
+  notificationPreferences NotificationPreference[]
+  documents               Document[]
+  branchManagement        BranchManager?
+  departmentManagement    DepartmentManager?
+
+  @@unique([diagnosticId, employeeId])
+  @@index([employeeId])
+  @@index([diagnosticId])
+  @@index([diagnosticId, branchId, departmentId])
+}
+
+// Document Model (for storing employee documents)
+model Document {
+  id       String  @id @default(cuid())
+  type     String // NID, PASSPORT, CONTRACT, CERTIFICATE
+  fileUrl  String
+  fileName String?
+  mimeType String? // e.g., application/pdf, image/jpeg
+  size     Int?
+
+  isVerified Boolean   @default(false)
+  createdAt  DateTime  @default(now())
+  deletedAt  DateTime?
+
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId String
+
+  diagnostic   Diagnostic @relation(fields: [diagnosticId], references: [id], onDelete: Cascade)
+  diagnosticId String
+
+  // Branch and Department Relations (NEW)
+  branch       Branch?     @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  branchId     String?
+  department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  departmentId String?
+
+  @@index([employeeId])
+  @@index([diagnosticId])
+  @@index([diagnosticId, branchId, departmentId])
+}
+
+// Attendance Model
+model Attendance {
+  id                    String             @id @default(cuid())
+  checkInTime           DateTime
+  checkOutTime          DateTime?
+  status                AttendanceStatus   @default(PRESENT)
+  checkInStatus         CheckInStatus      @default(CHECKED_IN)
+  checkOutStatus        CheckOutStatus     @default(NOT_CHECKED_OUT)
+  lateMinutes           Int? // Minutes late from shift start
+  earlyMinutes          Int? // Minutes early from shift start
+  earlyDepartureMinutes Int? // Minutes early from shift end
+  overtimeMinutes       Int? // Minutes of overtime
+  totalWorkMinutes      Int? // Total work minutes for the day
+  verificationMethod    VerificationMethod @default(FINGERPRINT)
+  notes                 String?
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+  deletedAt             DateTime?
+
+  // Relations
+  employee     Employee   @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId   String
+  diagnostic   Diagnostic @relation(fields: [diagnosticId], references: [id], onDelete: Cascade)
+  diagnosticId String
+  shift        Shift?     @relation(fields: [shiftId], references: [id])
+  shiftId      String?
+
+  // Branch and Department Relations (NEW)
+  branch       Branch?     @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  branchId     String?
+  department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  departmentId String?
+
+  @@index([employeeId])
+  @@index([diagnosticId])
+  @@index([checkInTime])
+  @@index([status])
+  @@index([diagnosticId, branchId, departmentId])
+}
+
+// Leave Model
+model Leave {
+  id           String      @id @default(cuid())
+  startDate    DateTime
+  endDate      DateTime
+  //leaveType    Leavetype   @default(CASUAL)
+  reason       String?
+  status       LeaveStatus @default(PENDING)
+  approvedBy   User?       @relation(fields: [approvedById], references: [id])
+  approvedById String?
+  approvedAt   DateTime?
+  attachment   String? // File path for any supporting documents
+  comments     String?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  deletedAt    DateTime?
+
+  // Relations
+  employee     Employee   @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId   String
+  leaveType    LeaveType? @relation(fields: [leaveTypeId], references: [id])
+  leaveTypeId  String?
+  diagnostic   Diagnostic @relation(fields: [diagnosticId], references: [id], onDelete: Cascade)
+  diagnosticId String
+
+  // Branch and Department Relations (NEW)
+  branch       Branch?     @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  branchId     String?
+  department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  departmentId String?
+
+  @@index([employeeId])
+  @@index([diagnosticId])
+  @@index([startDate, endDate])
+  @@index([status])
+  @@index([diagnosticId, branchId, departmentId])
+}
+
+model LeaveType {
+  id             String  @id @default(cuid())
+  name           String // Annual Leave, Sick Leave
+  description    String?
+  maxDaysPerYear Int?
+  isPaid         Boolean @default(true)
+  isActive       Boolean @default(true)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  diagnostic   Diagnostic @relation(fields: [diagnosticId], references: [id], onDelete: Cascade)
+  diagnosticId String
+
+  policies LeavePolicy[]
+  leaves   Leave[]
+
+  // Branch and Department Relations (NEW)
+  branch       Branch?     @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  branchId     String?
+  department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  departmentId String?
+
+  @@unique([name, diagnosticId, deletedAt])
+  @@index([diagnosticId])
+  @@index([diagnosticId, branchId, departmentId])
+}
+
+model LeavePolicy {
+  id               String  @id @default(cuid())
+  accrualRate      Float? // e.g. 7 days/year
+  accrualPeriod    String? // YEARLY | MONTHLY
+  carryForwardMax  Int?
+  approvalRequired Boolean @default(true)
+  isActive         Boolean @default(true)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  // Relations
+  leaveType   LeaveType @relation(fields: [leaveTypeId], references: [id], onDelete: Cascade)
+  leaveTypeId String
+
+  diagnostic   Diagnostic @relation(fields: [diagnosticId], references: [id], onDelete: Cascade)
+  diagnosticId String
+
+  // Branch and Department Relations (NEW)
+  branch       Branch?     @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  branchId     String?
+  department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  departmentId String?
+
+  @@index([leaveTypeId])
+  @@index([diagnosticId])
+  @@index([diagnosticId, branchId, departmentId])
+}
+
+// Shift Model (for defining work shifts)
+model Shift {
+  id               String    @id @default(cuid())
+  name             String
+  startTime        DateTime // Time only, date part should be ignored
+  endTime          DateTime // Time only, date part should be ignored
+  graceTimeMinutes Int       @default(10) // Grace period for being late
+  isFlexible       Boolean   @default(false)
+  workHours        Float     @default(8)
+  weekdays         Int[] // 0-6 representing days of the week this shift applies to
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  deletedAt        DateTime?
+
+  // Relations
+  diagnostic     Diagnostic      @relation(fields: [diagnosticId], references: [id], onDelete: Cascade)
+  diagnosticId   String
+  employeeShifts EmployeeShift[]
+  attendances    Attendance[]
+
+  // Branch and Department Relations (NEW)
+  branch       Branch?     @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  branchId     String?
+  department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  departmentId String?
+
+  @@unique([name, diagnosticId, deletedAt])
+  @@index([diagnosticId])
+  @@index([diagnosticId, branchId, departmentId])
+}
+
+// Employee Shift Assignment
+model EmployeeShift {
+  id            String    @id @default(cuid())
+  effectiveFrom DateTime
+  effectiveTo   DateTime?
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
+  notes         String?
+
+  // Relations
+  employee     Employee   @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId   String
+  shift        Shift      @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+  shiftId      String
+  diagnostic   Diagnostic @relation(fields: [diagnosticId], references: [id], onDelete: Cascade)
+  diagnosticId String
+
+  // Branch and Department Relations (NEW)
+  branch       Branch?     @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  branchId     String?
+  department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  departmentId String?
+
+  @@index([employeeId])
+  @@index([shiftId])
+  @@index([diagnosticId])
+  @@index([diagnosticId, branchId, departmentId])
+}
+
+// Fingerprint Device Model
+model FingerprintDevice {
+  id           String    @id @default(cuid())
+  deviceId     String    @unique // Manufacturer's device ID
+  name         String
+  model        String?
+  location     String?
+  ipAddress    String?
+  port         Int?
+  lastSyncTime DateTime?
+  isActive     Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  deletedAt    DateTime?
+
+  // Relations
+  diagnostic   Diagnostic @relation(fields: [diagnosticId], references: [id], onDelete: Cascade)
+  diagnosticId String
+
+  // Branch and Department Relations (NEW)
+  branch       Branch?     @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  branchId     String?
+  department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  departmentId String?
+
+  @@index([diagnosticId])
+  @@index([diagnosticId, branchId, departmentId])
+}
+
+// Attendance Settings
+model AttendanceSettings {
+  id                       String    @id @default(cuid())
+  workDays                 Int[] // 0-6 representing work days
+  autoMarkAbsent           Boolean   @default(true) // Auto mark absent if no check-in
+  absentMarkingTime        DateTime? // Time to mark absent (time-only field)
+  allowManualEntry         Boolean   @default(false)
+  overtimeEnabled          Boolean   @default(false)
+  requireApprovalForManual Boolean   @default(true)
+  autoLeaveApproval        Boolean   @default(false)
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
+
+  // Relations
+  diagnostic   Diagnostic @relation(fields: [diagnosticId], references: [id], onDelete: Cascade)
+  diagnosticId String     @unique
+}
+
+// Attendance Logs (For audit purposes)
+model AttendanceLog {
+  id            String   @id @default(cuid())
+  action        String // e.g., "MANUAL_ENTRY", "FINGERPRINT_SCAN", "EDITED"
+  details       Json
+  performedBy   User?    @relation(fields: [performedById], references: [id])
+  performedById String?
+  timestamp     DateTime @default(now())
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  diagnostic   Diagnostic @relation(fields: [diagnosticId], references: [id], onDelete: Cascade)
+  diagnosticId String
+
+  // Branch and Department Relations (NEW)
+  branch       Branch?     @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  branchId     String?
+  department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  departmentId String?
+
+  @@index([diagnosticId])
+  @@index([timestamp])
+  @@index([diagnosticId, branchId, departmentId])
+}
+
+// Holiday Model
+model Holiday {
+  id       String    @id @default(cuid())
+  name     String
+  date     DateTime?
+  forYear  Int?
+  fromDate DateTime?
+  toDate   DateTime?
+
+  description       String?
+  isRecurringYearly Boolean   @default(false)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  deletedAt         DateTime?
+
+  // Relations
+  diagnostic   Diagnostic @relation(fields: [diagnosticId], references: [id], onDelete: Cascade)
+  diagnosticId String
+
+  // Branch and Department Relations (NEW)
+  branch       Branch?     @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  branchId     String?
+  department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  departmentId String?
+
+  @@index([diagnosticId])
+  @@index([date])
+  @@index([diagnosticId, branchId, departmentId])
+}
+
+// Salary Structure Model
+model SalaryStructure {
+  id            String    @id @default(cuid())
+  name          String // e.g., "Junior Staff", "Senior Staff", "Manager"
+  basicSalary   Float // Base salary amount
+  isHourly      Boolean   @default(false) // Whether this is hourly or monthly
+  hourlyRate    Float? // Hourly rate for hourly employees
+  taxPercentage Float     @default(0) // Tax percentage
+  allowances    Json? // Other allowances as JSON {type: amount}
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
+
+  // Relations
+  diagnostic   Diagnostic       @relation(fields: [diagnosticId], references: [id], onDelete: Cascade)
+  diagnosticId String
+  employees    EmployeeSalary[]
+
+  // Branch and Department Relations (NEW)
+  branch       Branch?     @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  branchId     String?
+  department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  departmentId String?
+
+  @@unique([name, diagnosticId, deletedAt])
+  @@index([diagnosticId])
+  @@index([diagnosticId, branchId, departmentId])
+}
+
+// Employee Salary Model (connects employee to salary structure with additional details)
+model EmployeeSalary {
+  id                   String    @id @default(cuid())
+  effective            DateTime // When this salary assignment becomes effective
+  baseSalary           Float // Basic salary (can override the structure's)
+  additionalAllowances Json? // Additional employee-specific allowances
+  bankName             String?
+  accountNumber        String?
+  mfsNumber            String?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+  deletedAt            DateTime?
+
+  // Relations
+  employee          Employee        @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId        String
+  salaryStructure   SalaryStructure @relation(fields: [salaryStructureId], references: [id])
+  salaryStructureId String
+  diagnostic        Diagnostic      @relation(fields: [diagnosticId], references: [id], onDelete: Cascade)
+  diagnosticId      String
+
+  // Branch and Department Relations (NEW)
+  branch       Branch?     @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  branchId     String?
+  department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  departmentId String?
+
+  @@index([employeeId])
+  @@index([diagnosticId])
+  @@index([effective])
+  @@index([diagnosticId, branchId, departmentId])
+}
+
+// Payroll Period Model
+model PayrollPeriod {
+  id            String        @id @default(cuid())
+  name          String // e.g., "January 2025"
+  startDate     DateTime
+  endDate       DateTime
+  status        PayrollStatus @default(DRAFT)
+  processedDate DateTime?
+  approvedDate  DateTime?
+  approvedBy    User?         @relation(name: "payrollApprover", fields: [approvedById], references: [id])
+  approvedById  String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  deletedAt     DateTime?
+
+  // Relations
+  diagnostic   Diagnostic @relation(fields: [diagnosticId], references: [id], onDelete: Cascade)
+  diagnosticId String
+  payslips     Payslip[]
+
+  // Branch and Department Relations (NEW)
+  branch       Branch?     @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  branchId     String?
+  department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  departmentId String?
+
+  @@index([diagnosticId])
+  @@index([startDate, endDate])
+  @@index([status])
+  @@index([diagnosticId, branchId, departmentId])
+}
+
+// Payslip Model (individual employee pay for a period)
+model Payslip {
+  id               String        @id @default(cuid())
+  grossSalary      Float // Total pre-deduction salary
+  deductions       Json // Breakdown of deductions
+  netSalary        Float // Final pay amount
+  workingDays      Int // Total working days in period
+  presentDays      Int // Days employee was present
+  absentDays       Int // Days employee was absent
+  lateDays         Int // Days employee was late
+  leaveDays        Int // Days employee was on approved leave
+  overtimeHours    Float         @default(0) // Total overtime hours
+  overtimeAmount   Float         @default(0) // Overtime pay
+  bonusAmount      Float         @default(0) // Additional bonuses
+  paidStatus       PaymentStatus @default(PENDING)
+  paymentDate      DateTime?
+  paymentMethod    String? // e.g., "Bank Transfer", "Cash", "Check"
+  paymentReference String? // Reference number for payment
+  remarks          String?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  deletedAt        DateTime?
+
+  // Relations
+  advanceRepayment AdvanceRepayment[]
+  employee         Employee           @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId       String
+  payrollPeriod    PayrollPeriod      @relation(fields: [payrollPeriodId], references: [id], onDelete: Cascade)
+  payrollPeriodId  String
+  processedBy      User?              @relation(name: "payslipProcessor", fields: [processedById], references: [id])
+  processedById    String?
+  diagnostic       Diagnostic         @relation(fields: [diagnosticId], references: [id], onDelete: Cascade)
+  diagnosticId     String
+
+  // Branch and Department Relations (NEW)
+  branch       Branch?     @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  branchId     String?
+  department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  departmentId String?
+
+  @@index([employeeId])
+  @@index([payrollPeriodId])
+  @@index([diagnosticId])
+  @@index([paymentDate])
+  @@index([paidStatus])
+  @@index([diagnosticId, branchId, departmentId])
+}
+
+// Salary Advance Model (for tracking salary advances/loans)
+model SalaryAdvance {
+  id                String         @id @default(cuid())
+  amount            Float
+  reason            String?
+  requestDate       DateTime       @default(now())
+  approvalStatus    ApprovalStatus @default(PENDING)
+  approvedAmount    Float? // May be different from requested amount
+  approvedDate      DateTime?
+  approvedBy        User?          @relation(name: "advanceApprover", fields: [approvedById], references: [id])
+  approvedById      String?
+  disbursedDate     DateTime?
+  repaymentPlan     RepaymentPlan  @default(SINGLE_DEDUCTION)
+  installments      Int            @default(1) // Number of installments for repayment
+  installmentAmount Float? // Amount per installment
+  remainingAmount   Float? // Amount remaining to be repaid
+  completionDate    DateTime? // When fully repaid
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  deletedAt         DateTime?
+
+  // Relations
+  employee     Employee           @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId   String
+  diagnostic   Diagnostic         @relation(fields: [diagnosticId], references: [id], onDelete: Cascade)
+  diagnosticId String
+  repayments   AdvanceRepayment[]
+
+  // Branch and Department Relations (NEW)
+  branch       Branch?     @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  branchId     String?
+  department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  departmentId String?
+
+  @@index([employeeId])
+  @@index([diagnosticId])
+  @@index([approvalStatus])
+  @@index([requestDate])
+  @@index([diagnosticId, branchId, departmentId])
+}
+
+// Advance Repayment Model (for tracking individual repayments)
+model AdvanceRepayment {
+  id            String    @id @default(cuid())
+  amount        Float
+  repaymentDate DateTime
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
+
+  // Relations
+  salaryAdvance   SalaryAdvance @relation(fields: [salaryAdvanceId], references: [id], onDelete: Cascade)
+  salaryAdvanceId String
+  payslip         Payslip?      @relation(fields: [payslipId], references: [id])
+  payslipId       String?
+  diagnostic      Diagnostic    @relation(fields: [diagnosticId], references: [id], onDelete: Cascade)
+  diagnosticId    String
+
+  // Branch and Department Relations (NEW)
+  branch       Branch?     @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  branchId     String?
+  department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  departmentId String?
+
+  @@index([salaryAdvanceId])
+  @@index([payslipId])
+  @@index([diagnosticId])
+  @@index([diagnosticId, branchId, departmentId])
+}
+
+// Bonus Model (for tracking one-time bonuses)
+model Bonus {
+  id             String         @id @default(cuid())
+  name           String // e.g., "Performance Bonus", "Year-end Bonus"
+  amount         Float
+  reason         String?
+  approvalStatus ApprovalStatus @default(PENDING)
+  approvedDate   DateTime?
+  approvedBy     User?          @relation(name: "bonusApprover", fields: [approvedById], references: [id])
+  approvedById   String?
+  paymentDate    DateTime?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  deletedAt      DateTime?
+
+  // Relations
+  employee     Employee   @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId   String
+  diagnostic   Diagnostic @relation(fields: [diagnosticId], references: [id], onDelete: Cascade)
+  diagnosticId String
+
+  // Branch and Department Relations (NEW)
+  branch       Branch?     @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  branchId     String?
+  department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  departmentId String?
+
+  @@index([employeeId])
+  @@index([diagnosticId])
+  @@index([approvalStatus])
+  @@index([diagnosticId, branchId, departmentId])
+}
+
+// Allowance Type Model (for defining types of allowances)
+model AllowanceType {
+  id                String    @id @default(cuid())
+  name              String // e.g., "Housing", "Transport", "Medical"
+  description       String?
+  isPercentage      Boolean   @default(false) // Whether calculated as % of base salary
+  defaultAmount     Float?
+  defaultPercentage Float?
+  taxable           Boolean   @default(true) // Whether this allowance is taxable
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  deletedAt         DateTime?
+
+  // Relations
+  diagnostic   Diagnostic @relation(fields: [diagnosticId], references: [id], onDelete: Cascade)
+  diagnosticId String
+
+  // Branch and Department Relations (NEW)
+  branch       Branch?     @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  branchId     String?
+  department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  departmentId String?
+
+  @@unique([name, diagnosticId, deletedAt])
+  @@index([diagnosticId])
+  @@index([diagnosticId, branchId, departmentId])
+}
+
+// Deduction Type Model (for defining types of deductions)
+model DeductionType {
+  id                String    @id @default(cuid())
+  name              String // e.g., "Income Tax", "Pension", "Insurance"
+  description       String?
+  isPercentage      Boolean   @default(true) // Whether calculated as % of gross salary
+  defaultAmount     Float?
+  defaultPercentage Float?
+  isStatutory       Boolean   @default(false) // Whether this is a government-mandated deduction
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  deletedAt         DateTime?
+
+  // Relations
+  diagnostic   Diagnostic @relation(fields: [diagnosticId], references: [id], onDelete: Cascade)
+  diagnosticId String
+
+  // Branch and Department Relations (NEW)
+  branch       Branch?     @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  branchId     String?
+  department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  departmentId String?
+
+  @@unique([name, diagnosticId, deletedAt])
+  @@index([diagnosticId])
+  @@index([diagnosticId, branchId, departmentId])
+}
+
+// Salary Revision Model (for tracking salary changes over time)
+model SalaryRevision {
+  id               String         @id @default(cuid())
+  previousSalary   Float
+  newSalary        Float
+  percentageChange Float
+  effectiveDate    DateTime
+  reason           String?
+  approvalStatus   ApprovalStatus @default(PENDING)
+  approvedDate     DateTime?
+  approvedBy       User?          @relation(name: "revisionApprover", fields: [approvedById], references: [id])
+  approvedById     String?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  deletedAt        DateTime?
+
+  // Relations
+  employee     Employee   @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId   String
+  diagnostic   Diagnostic @relation(fields: [diagnosticId], references: [id], onDelete: Cascade)
+  diagnosticId String
+
+  // Branch and Department Relations (NEW)
+  branch       Branch?     @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  branchId     String?
+  department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  departmentId String?
+
+  @@index([employeeId])
+  @@index([diagnosticId])
+  @@index([effectiveDate])
+  @@index([approvalStatus])
+  @@index([diagnosticId, branchId, departmentId])
+}

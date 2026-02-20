@@ -203,6 +203,65 @@ function copyIfExists(sourcePath: string, targetPath: string): void {
   fs.cpSync(sourcePath, targetPath, { recursive: true });
 }
 
+function pruneArtifacts(rootDir: string, shouldDelete: (filePath: string) => boolean): number {
+  if (!fs.existsSync(rootDir)) {
+    return 0;
+  }
+
+  let removedCount = 0;
+  const queue: string[] = [rootDir];
+
+  while (queue.length > 0) {
+    const current = queue.pop();
+    if (!current) {
+      continue;
+    }
+
+    const entries = fs.readdirSync(current, { withFileTypes: true });
+    for (const entry of entries) {
+      const fullPath = path.join(current, entry.name);
+
+      if (entry.isDirectory()) {
+        queue.push(fullPath);
+        continue;
+      }
+
+      if (!entry.isFile()) {
+        continue;
+      }
+
+      if (!shouldDelete(fullPath)) {
+        continue;
+      }
+
+      fs.rmSync(fullPath, { force: true });
+      removedCount += 1;
+    }
+  }
+
+  return removedCount;
+}
+
+function pruneBackendBuildArtifacts(targetResourcesRootDir: string): void {
+  const backendOutputDir = path.join(targetResourcesRootDir, 'backend');
+  const removedCount = pruneArtifacts(backendOutputDir, filePath => filePath.endsWith('.map'));
+  if (removedCount > 0) {
+    console.log(`Pruned ${removedCount} backend sourcemap files.`);
+  }
+}
+
+function pruneFrontendBuildArtifacts(targetResourcesRootDir: string): void {
+  const frontendOutputDir = path.join(targetResourcesRootDir, 'frontend');
+  const removedCount = pruneArtifacts(frontendOutputDir, filePath => {
+    const normalized = filePath.replace(/\\/g, '/');
+    return normalized.endsWith('.map') || normalized.endsWith('/.DS_Store');
+  });
+
+  if (removedCount > 0) {
+    console.log(`Pruned ${removedCount} frontend sourcemap/metadata files.`);
+  }
+}
+
 function resolveFrontendStaticDir(): string {
   const outputDir = path.join(frontendProjectDir, 'output');
   const outDir = path.join(frontendProjectDir, 'out');
@@ -222,11 +281,13 @@ function copyBackendResources(targetResourcesRootDir: string): void {
   const backendOutputDir = path.join(targetResourcesRootDir, 'backend');
   fs.mkdirSync(backendOutputDir, { recursive: true });
 
-  const staticItems = ['src', 'prisma', 'package.json', 'data', 'secretKeys', backendBundleFile];
+  const staticItems = ['prisma', 'package.json', 'data', 'secretKeys', backendBundleFile];
 
   for (const item of staticItems) {
     copyIfExists(path.join(backendProjectDir, item), path.join(backendOutputDir, item));
   }
+
+  copyIfExists(path.join(backendProjectDir, 'src', 'views'), path.join(backendOutputDir, 'views'));
 
   const rootEntries = fs.readdirSync(backendProjectDir, { withFileTypes: true });
 
@@ -242,6 +303,25 @@ function copyBackendResources(targetResourcesRootDir: string): void {
   fs.mkdirSync(path.join(backendOutputDir, 'data', 'file'), { recursive: true });
   fs.mkdirSync(path.join(backendOutputDir, 'secretKeys'), { recursive: true });
   fs.rmSync(path.join(backendOutputDir, 'node_modules'), { recursive: true, force: true });
+}
+
+function normalizeBackendRuntimeLayout(targetResourcesRootDir: string): void {
+  const backendOutputDir = path.join(targetResourcesRootDir, 'backend');
+  const legacyViewsDir = path.join(backendOutputDir, 'src', 'views');
+  const runtimeViewsDir = path.join(backendOutputDir, 'views');
+
+  if (!fs.existsSync(runtimeViewsDir) && fs.existsSync(legacyViewsDir)) {
+    fs.mkdirSync(path.dirname(runtimeViewsDir), { recursive: true });
+    fs.cpSync(legacyViewsDir, runtimeViewsDir, { recursive: true });
+  }
+
+  fs.rmSync(path.join(backendOutputDir, 'src'), { recursive: true, force: true });
+
+  if (!fs.existsSync(runtimeViewsDir)) {
+    throw new Error(
+      `Backend runtime views directory is missing: ${runtimeViewsDir}. Ensure templates are available before packaging.`
+    );
+  }
 }
 
 function copyFrontendResources(targetResourcesRootDir: string): void {
@@ -313,6 +393,7 @@ export async function prepareResources(): Promise<void> {
     copyIfExists(existingBackendResourcesDir, path.join(tempResourcesDir, 'backend'));
   }
 
+  normalizeBackendRuntimeLayout(tempResourcesDir);
   fs.rmSync(path.join(tempResourcesDir, 'backend', 'node_modules'), { recursive: true, force: true });
   assertBackendBundleExists(tempResourcesDir);
 
@@ -321,6 +402,9 @@ export async function prepareResources(): Promise<void> {
   } else {
     copyIfExists(existingFrontendResourcesDir, path.join(tempResourcesDir, 'frontend'));
   }
+
+  pruneBackendBuildArtifacts(tempResourcesDir);
+  pruneFrontendBuildArtifacts(tempResourcesDir);
 
   fs.rmSync(resourcesDir, { recursive: true, force: true });
   fs.renameSync(tempResourcesDir, resourcesDir);

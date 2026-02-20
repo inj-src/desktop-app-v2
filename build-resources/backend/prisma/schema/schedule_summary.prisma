@@ -1,0 +1,109 @@
+model ScheduledSummaryConfig {
+  id          String        @id @default(cuid())
+  name        String? // Optional: "Monthly Indoor Report", "Weekly Sales Summary"
+  summaryType SummaryType[] // INDOOR, OUTDOOR, RECEPTIONIST
+  isEnabled   Boolean       @default(true)
+
+  // Scheduling configuration
+  scheduleType ScheduleFrequency // DAILY, WEEKLY, MONTHLY, CUSTOM_INTERVAL
+  sendTime     String? // e.g., "09:00" - time of day to send
+
+  // For CUSTOM_INTERVAL
+  intervalDays Int? // e.g., 2 for every 2 days
+
+  // Exclusions
+  excludeDaysOfWeek    Int[] // Array: 0=Sunday, 1=Monday, etc.
+  excludeDaysOfMonth   Int[] // Array: 1-31 for specific dates
+  excludeSpecificDates DateTime[] // For holidays or specific dates
+
+  // For WEEKLY schedule
+  sendOnDaysOfWeek Int[] // Array: 0=Sunday, 1=Monday, etc.
+
+  // For MONTHLY schedule
+  sendOnDayOfMonth     Int? // e.g., 1 for first day, 15 for 15th
+  sendOnLastDayOfMonth Boolean @default(false)
+
+  // Relations
+  diagnostic   Diagnostic @relation(fields: [diagnosticId], references: [id], onDelete: Cascade)
+  diagnosticId String
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  // Branch and Department Relations (NEW)
+  branch       Branch?     @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  branchId     String?
+  department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  departmentId String?
+
+  @@unique([diagnosticId, name, deletedAt])
+  @@index([diagnosticId])
+  @@index([isEnabled])
+  @@index([branchId])
+  @@index([departmentId])
+}
+
+// Recipients table
+model ScheduledSummaryRecipientConfig {
+  id String @id @default(cuid())
+
+  // Contact methods
+  email          String?
+  phone          String?
+  whatsappNumber String?
+
+  // Verification status for each method
+  isEmailVerified Boolean   @default(false)
+  emailVerifiedAt DateTime?
+
+  isPhoneVerified Boolean   @default(false)
+  phoneVerifiedAt DateTime?
+
+  isWhatsAppVerified Boolean   @default(false)
+  whatsappVerifiedAt DateTime?
+
+  // Delivery preferences
+  sendViaEmail    Boolean @default(false)
+  sendViaPhone    Boolean @default(false)
+  sendViaWhatsApp Boolean @default(false)
+
+  // Relations
+  diagnostic   Diagnostic @relation(fields: [diagnosticId], references: [id])
+  diagnosticId String     @unique
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@index([diagnosticId])
+  @@index([email])
+  @@index([phone])
+  @@index([whatsappNumber])
+}
+
+// Enums
+enum SummaryType {
+  INDOOR
+  OUTDOOR
+  RECEPTIONIST
+  EXPENSE
+  MONTHLY
+}
+
+enum ScheduleFrequency {
+  DAILY
+  WEEKLY
+  MONTHLY
+  CUSTOM_INTERVAL // For every X days
+}
+
+enum SummaryPeriod {
+  SINCE_LAST_SEND // Data since last summary was sent
+  LAST_24_HOURS
+  LAST_7_DAYS
+  LAST_30_DAYS
+  CURRENT_MONTH
+  PREVIOUS_MONTH
+  CUSTOM
+}
