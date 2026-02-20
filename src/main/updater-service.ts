@@ -1,5 +1,5 @@
-import { app, dialog, type BrowserWindow, type MessageBoxOptions } from 'electron';
-import { autoUpdater, type ProgressInfo, type UpdateInfo } from 'electron-updater';
+import { app, dialog, type BrowserWindow, type MessageBoxOptions } from "electron";
+import { autoUpdater, type ProgressInfo, type UpdateInfo } from "electron-updater";
 
 interface UpdaterServiceOptions {
   getMainWindow: () => BrowserWindow | null;
@@ -28,8 +28,8 @@ export class UpdaterService {
       return;
     }
 
-    if (!app.isPackaged && process.env.ENABLE_DEV_UPDATER !== 'true') {
-      this.onLog('updater', 'system', 'Auto-update check skipped in development mode.');
+    if (!app.isPackaged && process.env.ENABLE_DEV_UPDATER !== "true") {
+      this.onLog("updater", "system", "Auto-update check skipped in development mode.");
       return;
     }
 
@@ -38,43 +38,43 @@ export class UpdaterService {
     autoUpdater.autoDownload = false;
     autoUpdater.autoInstallOnAppQuit = true;
 
-    autoUpdater.on('checking-for-update', () => {
-      this.onLog('updater', 'system', 'Checking for updates...');
+    autoUpdater.on("checking-for-update", () => {
+      this.onLog("updater", "system", "Checking for updates...");
     });
 
-    autoUpdater.on('update-available', info => {
-      this.onLog('updater', 'system', `Update available: ${info.version}`);
+    autoUpdater.on("update-available", (info) => {
+      this.onLog("updater", "system", `Update available: ${info.version}`);
       this.handleUpdateAvailable(info);
     });
 
-    autoUpdater.on('update-not-available', () => {
-      this.onLog('updater', 'system', 'No update available.');
+    autoUpdater.on("update-not-available", () => {
+      this.onLog("updater", "system", "No update available.");
     });
 
-    autoUpdater.on('download-progress', progress => {
+    autoUpdater.on("download-progress", (progress) => {
       this.handleDownloadProgress(progress);
     });
 
-    autoUpdater.on('update-downloaded', info => {
-      this.onLog('updater', 'system', `Update downloaded: ${info.version}`);
+    autoUpdater.on("update-downloaded", (info) => {
+      this.onLog("updater", "system", `Update downloaded: ${info.version}`);
       this.handleUpdateDownloaded(info);
     });
 
-    autoUpdater.on('error', error => {
-      this.onLog('updater', 'error', error?.message || String(error));
+    autoUpdater.on("error", (error) => {
+      this.onLog("updater", "error", error?.message || String(error));
     });
 
-    void autoUpdater.checkForUpdates().catch(error => {
-      this.onLog('updater', 'error', error?.message || String(error));
+    void autoUpdater.checkForUpdates().catch((error) => {
+      this.onLog("updater", "error", error?.message || String(error));
     });
   }
 
   private handleDownloadProgress(progress: ProgressInfo): void {
-    const percent = Number.isFinite(progress.percent) ? progress.percent.toFixed(1) : '0.0';
+    const percent = Number.isFinite(progress.percent) ? progress.percent.toFixed(1) : "0.0";
     this.onLog(
-      'updater',
-      'system',
-      `Downloading update: ${percent}% (${formatBytes(progress.transferred)}/${formatBytes(progress.total)})`
+      "updater",
+      "system",
+      `Downloading update: ${percent}% (${formatBytes(progress.transferred)}/${formatBytes(progress.total)})`,
     );
   }
 
@@ -85,8 +85,8 @@ export class UpdaterService {
 
     this.updateAvailabilityPromptShown = true;
 
-    void this.promptForDownload(info).catch(error => {
-      this.onLog('updater', 'error', error?.message || String(error));
+    void this.promptForDownload(info).catch((error) => {
+      this.onLog("updater", "error", error?.message || String(error));
     });
   }
 
@@ -97,46 +97,51 @@ export class UpdaterService {
 
     this.installPromptShown = true;
 
-    void this.promptForInstall(info).catch(error => {
-      this.onLog('updater', 'error', error?.message || String(error));
+    void this.promptForInstall(info).catch((error) => {
+      this.onLog("updater", "error", error?.message || String(error));
     });
   }
 
   private async promptForDownload(info: UpdateInfo): Promise<void> {
+    const sizeText = formatUpdateDownloadSize(info);
+    const detail = sizeText
+      ? `Download size: ${sizeText}\n\nDo you want to download and install this update now?`
+      : "Do you want to download and install this update now?";
+
     const response = await this.showMessageBox({
-      type: 'info',
-      title: 'Update Available',
+      type: "info",
+      title: "Update Available",
       message: `Version ${info.version} is available.`,
-      detail: 'Do you want to download and install this update now?',
-      buttons: ['Download Update', 'Later'],
+      detail,
+      buttons: ["Download Update", "Later"],
       defaultId: 0,
       cancelId: 1,
       noLink: true,
     });
 
     if (response !== 0) {
-      this.onLog('updater', 'system', 'Update dialog dismissed for this app session.');
+      this.onLog("updater", "system", "Update dialog dismissed for this app session.");
       return;
     }
 
-    this.onLog('updater', 'system', 'User accepted update download.');
+    this.onLog("updater", "system", "User accepted update download.");
     await autoUpdater.downloadUpdate();
   }
 
   private async promptForInstall(info: UpdateInfo): Promise<void> {
     const response = await this.showMessageBox({
-      type: 'info',
-      title: 'Update Ready',
+      type: "info",
+      title: "Update Ready",
       message: `Version ${info.version} has been downloaded.`,
-      detail: 'Restart now to install the update?',
-      buttons: ['Restart and Install', 'Later'],
+      detail: "Restart now to install the update?",
+      buttons: ["Restart and Install", "Later"],
       defaultId: 0,
       cancelId: 1,
       noLink: true,
     });
 
     if (response !== 0) {
-      this.onLog('updater', 'system', 'Install dialog dismissed for this app session.');
+      this.onLog("updater", "system", "Install dialog dismissed for this app session.");
       return;
     }
 
@@ -149,7 +154,7 @@ export class UpdaterService {
     }
 
     this.installInProgress = true;
-    this.onLog('updater', 'system', 'Preparing app shutdown for update installation...');
+    this.onLog("updater", "system", "Preparing app shutdown for update installation...");
 
     try {
       await this.onPrepareInstall();
@@ -158,7 +163,7 @@ export class UpdaterService {
       throw error;
     }
 
-    this.onLog('updater', 'system', 'Quitting and installing update...');
+    this.onLog("updater", "system", "Quitting and installing update...");
     autoUpdater.quitAndInstall(false, true);
   }
 
@@ -176,10 +181,10 @@ export class UpdaterService {
 
 function formatBytes(input: number): string {
   if (!Number.isFinite(input) || input <= 0) {
-    return '0 B';
+    return "0 B";
   }
 
-  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const units = ["B", "KB", "MB", "GB", "TB"];
   let value = input;
   let index = 0;
 
@@ -189,4 +194,31 @@ function formatBytes(input: number): string {
   }
 
   return `${value.toFixed(value >= 10 || index === 0 ? 0 : 1)} ${units[index]}`;
+}
+
+function formatUpdateDownloadSize(info: UpdateInfo): string | null {
+  const files = Array.isArray(info.files) ? info.files : [];
+  const totalSize = files.reduce((sum, file) => {
+    const size = Number(file?.size);
+    if (!Number.isFinite(size) || size <= 0) {
+      return sum;
+    }
+
+    return sum + size;
+  }, 0);
+
+  if (totalSize <= 0) {
+    return null;
+  }
+
+  return formatMegabytes(totalSize);
+}
+
+function formatMegabytes(input: number): string {
+  if (!Number.isFinite(input) || input <= 0) {
+    return "0 MB";
+  }
+
+  const valueInMb = input / (1024 * 1024);
+  return `${valueInMb.toFixed(1)} MB`;
 }
