@@ -12,7 +12,7 @@ Workflow file: `.github/workflows/windows-release.yml`
 
 Trigger:
 
-- Push a tag like `v1.0.1` (normally via `npm run build:prod`)
+- Push a tag like `v1.0.1` (normally via `npm run publish`)
 
 Permissions:
 
@@ -76,28 +76,34 @@ CSC_KEY_PASSWORD=\"your-cert-password\" \
 npm run build -- --publish always --win nsis --x64
 ```
 
-## 6) Interactive production release flow (`build:prod`)
+## 6) Interactive production release flow (`publish`)
 
 Use:
 
 ```bash
-npm run build:prod
+npm run publish
 ```
 
 Flow:
 
 1. Runs `npm run prepare:resources` first.
-2. Runs local production build check (`npm run build`).
-3. If build succeeds, asks whether to release.
+2. Asks whether to run local production build check (`npm run build`) with default `Yes`.
+3. If build runs and succeeds, asks whether to release.
 4. If confirmed, pushes your current branch to `origin`.
-5. Asks for release tag (default: `v<package.json version>`).
-6. Pushes that tag to `origin`.
+5. Creates release tag from package version (`v<package.json version>`).
+6. Pushes the tag to `origin`.
 7. Tag push triggers GitHub Actions Windows release workflow automatically.
 
 Non-interactive variant:
 
 ```bash
-npm run build:prod -- --yes --tag v1.0.1
+npm run publish -- --yes
+```
+
+Skip local build check explicitly:
+
+```bash
+npm run publish -- --yes --no-build
 ```
 
 ## 7) `prepare:resources` interactive behavior

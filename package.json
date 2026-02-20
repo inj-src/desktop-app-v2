@@ -11,7 +11,7 @@
     "package:builder": "electron-builder",
     "build": "tsx scripts/build-and-package.ts",
     "build:dir": "tsx scripts/build-and-package.ts --dir",
-    "build:prod": "tsx scripts/build-prod.ts",
+    "publish": "tsx scripts/build-prod.ts",
     "start": "npm run compile && electron .",
     "dev": "npm run compile && electron ."
   },

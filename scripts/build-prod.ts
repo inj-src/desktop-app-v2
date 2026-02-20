@@ -24,18 +24,30 @@ const c = {
 
 interface ParsedArgs {
   yes: boolean;
+  build?: boolean;
 }
 
 function parseArgs(argv: string[]): ParsedArgs {
   let yes = false;
+  let build: boolean | undefined;
 
   for (const arg of argv) {
     if (arg === "--yes") {
       yes = true;
+      continue;
+    }
+
+    if (arg === "--build") {
+      build = true;
+      continue;
+    }
+
+    if (arg === "--no-build") {
+      build = false;
     }
   }
 
-  return { yes };
+  return { yes, build };
 }
 
 function runCommand(label: string, command: string, args: string[], cwd = rootDir): Promise<void> {
@@ -147,7 +159,7 @@ function getCurrentBranch(): string {
 
   const branch = branchResult.stdout.trim();
   if (!branch || branch === "HEAD") {
-    throw new Error("Detached HEAD is not supported for build:prod. Checkout a branch first.");
+    throw new Error("Detached HEAD is not supported for publish. Checkout a branch first.");
   }
 
   return branch;
@@ -163,7 +175,7 @@ function assertWorkTreeClean(): void {
 
   if (statusResult.stdout.trim().length > 0) {
     throw new Error(
-      "Working tree has uncommitted changes. Commit and push your changes first, then run `npm run build:prod` again.",
+      "Working tree has uncommitted changes. Commit and push your changes first, then run `npm run publish` again.",
     );
   }
 }
@@ -196,16 +208,20 @@ function assertReleaseResourcesCommitted(): void {
     throw new Error(
       [
         "Prepared resources archive is not committed yet.",
-        "Commit `build-resources/resources.zip` before running `build:prod` release.",
+        "Commit `build-resources/resources.zip` before running `publish` release.",
       ].join("\n"),
     );
   }
 }
 
-async function askYesNo(question: string): Promise<boolean> {
+async function askYesNo(question: string, defaultYes = false): Promise<boolean> {
   const rl = createInterface({ input, output });
   try {
     const answer = (await rl.question(question)).trim().toLowerCase();
+    if (!answer) {
+      return defaultYes;
+    }
+
     return answer === "y" || answer === "yes";
   } finally {
     rl.close();
@@ -218,9 +234,17 @@ async function run(): Promise<void> {
   console.log(c.step("Preparing build resources (`npm run prepare:resources`)..."));
   await runCommand("prepare-resources", npmBin, ["run", "prepare:resources"]);
 
-  console.log(c.step("Running local production build check (`npm run build`)..."));
-  await runCommand("local-prod-build", npmBin, ["run", "build"]);
-  console.log(c.success("Local production build passed."));
+  const shouldRunBuild =
+    parsedArgs.build ??
+    (await askYesNo(c.cyan("Run local production build check (`npm run build`)? (Y/n): "), true));
+
+  if (shouldRunBuild) {
+    console.log(c.step("Running local production build check (`npm run build`)..."));
+    await runCommand("local-prod-build", npmBin, ["run", "build"]);
+    console.log(c.success("Local production build passed."));
+  } else {
+    console.log(c.warn("Skipping local production build check."));
+  }
 
   const shouldRelease =
     parsedArgs.yes ||
