@@ -331,17 +331,17 @@ function copyBackendResources(paths: PrepareResourcesPaths, targetResourcesRootD
     path.join(backendOutputDir, "views"),
   );
 
-  const rootEntries = fs.readdirSync(paths.backendProjectDir, { withFileTypes: true });
-  for (const entry of rootEntries) {
-    if (!entry.isFile() || !entry.name.startsWith(".env")) {
-      continue;
-    }
-
-    copyIfExists(
-      path.join(paths.backendProjectDir, entry.name),
-      path.join(backendOutputDir, entry.name),
+  const offlineEnvPath = path.join(paths.backendProjectDir, ".env.offline");
+  if (!fs.existsSync(offlineEnvPath)) {
+    throw new Error(
+      [
+        "Missing required backend environment file for desktop packaging.",
+        `- ${offlineEnvPath}`,
+        "Create `.env.offline` in backend repository, then run `npm run prepare:resources` again.",
+      ].join("\n"),
     );
   }
+  copyIfExists(offlineEnvPath, path.join(backendOutputDir, ".env"));
 
   fs.mkdirSync(path.join(backendOutputDir, "data", "image"), { recursive: true });
   fs.mkdirSync(path.join(backendOutputDir, "data", "file"), { recursive: true });
@@ -353,6 +353,8 @@ function normalizeBackendRuntimeLayout(targetResourcesRootDir: string): void {
   const backendOutputDir = path.join(targetResourcesRootDir, "backend");
   const legacyViewsDir = path.join(backendOutputDir, "src", "views");
   const runtimeViewsDir = path.join(backendOutputDir, "views");
+  const legacyOfflineEnv = path.join(backendOutputDir, ".env.offline");
+  const runtimeEnvPath = path.join(backendOutputDir, ".env");
 
   if (!fs.existsSync(runtimeViewsDir) && fs.existsSync(legacyViewsDir)) {
     fs.mkdirSync(path.dirname(runtimeViewsDir), { recursive: true });
@@ -361,6 +363,19 @@ function normalizeBackendRuntimeLayout(targetResourcesRootDir: string): void {
 
   fs.rmSync(path.join(backendOutputDir, "src"), { recursive: true, force: true });
   normalizePrismaRuntimeNodeModules(targetResourcesRootDir);
+
+  if (!fs.existsSync(runtimeEnvPath) && fs.existsSync(legacyOfflineEnv)) {
+    fs.cpSync(legacyOfflineEnv, runtimeEnvPath, { force: true });
+  }
+
+  const backendRootEntries = fs.readdirSync(backendOutputDir, { withFileTypes: true });
+  for (const entry of backendRootEntries) {
+    if (!entry.isFile() || !entry.name.startsWith(".env") || entry.name === ".env") {
+      continue;
+    }
+
+    fs.rmSync(path.join(backendOutputDir, entry.name), { force: true });
+  }
 
   if (!fs.existsSync(runtimeViewsDir)) {
     throw new Error(
