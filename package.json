@@ -1,6 +1,6 @@
 {
   "name": "sasthotech",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "description": "Electron shell for SasthoTech local backend and frontend",
   "main": "build/main.js",
   "type": "commonjs",
