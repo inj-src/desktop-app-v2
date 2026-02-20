@@ -169,24 +169,34 @@ function assertWorkTreeClean(): void {
 }
 
 function assertReleaseResourcesCommitted(): void {
-  const ignoredResult = runGit(["check-ignore", "-q", "build-resources"]);
-  if (ignoredResult.status === 0) {
+  const archivePath = "build-resources/resources.zip";
+  const absoluteArchivePath = path.join(rootDir, archivePath);
+  if (!fs.existsSync(absoluteArchivePath)) {
     throw new Error(
       [
-        "`build-resources` is git-ignored, so CI will not receive prepared artifacts.",
-        "Remove it from `.gitignore` or force-add the required files before release.",
+        "Prepared resources archive is missing.",
+        "Run `npm run prepare:resources` to generate build-resources/resources.zip.",
       ].join("\n"),
     );
   }
 
-  const trackedBackendResult = runGit(["ls-files", "--error-unmatch", "build-resources/backend"]);
-  const trackedFrontendResult = runGit(["ls-files", "--error-unmatch", "build-resources/frontend"]);
-
-  if (trackedBackendResult.status !== 0 || trackedFrontendResult.status !== 0) {
+  const ignoredResult = runGit(["check-ignore", "-q", archivePath]);
+  if (ignoredResult.status === 0) {
     throw new Error(
       [
-        "Prepared resources are not committed yet.",
-        "Commit `build-resources/backend` and `build-resources/frontend` before running `build:prod` release.",
+        "`build-resources/resources.zip` is git-ignored, so CI will not receive prepared artifacts.",
+        "Unignore that file in `.gitignore` and commit it before release.",
+      ].join("\n"),
+    );
+  }
+
+  const trackedArchiveResult = runGit(["ls-files", "--error-unmatch", archivePath]);
+
+  if (trackedArchiveResult.status !== 0) {
+    throw new Error(
+      [
+        "Prepared resources archive is not committed yet.",
+        "Commit `build-resources/resources.zip` before running `build:prod` release.",
       ].join("\n"),
     );
   }

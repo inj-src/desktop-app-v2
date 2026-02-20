@@ -3,11 +3,12 @@ import fs from "node:fs";
 import { spawnSync } from "node:child_process";
 import crypto from "node:crypto";
 import crossSpawn from "cross-spawn";
+import { resolveResourcesArchiveLayout } from "./resources-archive";
+import { ensureResourcesAvailableForBuild } from "./resources-archive-build";
 
 const rootDir = path.resolve(__dirname, "..");
-const resourcesRootDir = path.join(rootDir, "build-resources");
-const backendResourcesDir = path.join(resourcesRootDir, "backend");
-const frontendResourcesDir = path.join(resourcesRootDir, "frontend");
+const resourcesLayout = resolveResourcesArchiveLayout(rootDir);
+const backendResourcesDir = resourcesLayout.backendResourcesDir;
 const backendSecretKeysDir = path.join(backendResourcesDir, "secretKeys");
 
 function buildSpawnEnv(): NodeJS.ProcessEnv {
@@ -27,27 +28,6 @@ function buildSpawnEnv(): NodeJS.ProcessEnv {
   }
 
   return nextEnv;
-}
-
-function assertPreparedResources(): void {
-  if (
-    fs.existsSync(resourcesRootDir) &&
-    fs.statSync(resourcesRootDir).isDirectory() &&
-    fs.existsSync(backendResourcesDir) &&
-    fs.statSync(backendResourcesDir).isDirectory() &&
-    fs.existsSync(frontendResourcesDir) &&
-    fs.statSync(frontendResourcesDir).isDirectory()
-  ) {
-    return;
-  }
-
-  throw new Error(
-    [
-      "Missing prepared build resources.",
-      "Run `npm run prepare:resources` first, then retry `npm run build`.",
-      `Expected folder: ${resourcesRootDir}`,
-    ].join("\n"),
-  );
 }
 
 function ensureBackendSecretKeysPrepared(): void {
@@ -160,7 +140,7 @@ async function run(): Promise<void> {
   const dirMode = cliArgs.includes("--dir");
   const extraBuilderArgs = cliArgs.filter((arg) => arg !== "--dir");
 
-  assertPreparedResources();
+  await ensureResourcesAvailableForBuild(resourcesLayout);
   ensureBackendSecretKeysPrepared();
   ensureReleaseEnvFallbacks();
   await runNpm("desktop-compile", ["run", "compile"]);

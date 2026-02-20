@@ -1,6 +1,0 @@
--- AlterTable
-ALTER TABLE "PC" ADD COLUMN     "address" TEXT NOT NULL DEFAULT '',
-ADD COLUMN     "district" TEXT NOT NULL DEFAULT '',
-ADD COLUMN     "fathersName" TEXT NOT NULL DEFAULT '',
-ADD COLUMN     "mobile" TEXT NOT NULL DEFAULT '',
-ADD COLUMN     "thana" TEXT NOT NULL DEFAULT '';

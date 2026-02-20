@@ -251,7 +251,7 @@ export class ProcessService {
 
     if (!fs.existsSync(backendEntry)) {
       throw new Error(
-        `Backend entry file was not found: ${backendEntry}. Run npm run prepare:resources and restart the app.`
+        `Backend entry file was not found: ${backendEntry}. Run npm run prepare:resources and restart the app.`,
       );
     }
 
@@ -260,14 +260,6 @@ export class ProcessService {
     const databaseUrl = this.resolveDatabaseUrl() || process.env.DATABASE_URL || null;
     if (!databaseUrl) {
       throw new Error("No database URL available. Start database service first.");
-    }
-
-    const cookieSecret = process.env.COOKIE_SECRET?.trim() || "";
-    if (!cookieSecret) {
-      const message =
-        "Failed to read COOKIE_SECRET. Backend will not start because signed cookies require a valid secret.";
-      this.onLog("backend", "error", message);
-      throw new Error(message);
     }
 
     const env = {
@@ -279,7 +271,6 @@ export class ProcessService {
       DB_MODE: this.databaseMode,
       PRISMA_PG_POOL_MAX:
         process.env.PRISMA_PG_POOL_MAX ?? (this.databaseMode === "pglite" ? "1" : "10"),
-      COOKIE_SECRET: cookieSecret,
       COOKIE_SECURE: process.env.COOKIE_SECURE ?? "false",
       COOKIE_SAME_SITE: process.env.COOKIE_SAME_SITE ?? "lax",
       DATABASE_URL: databaseUrl,

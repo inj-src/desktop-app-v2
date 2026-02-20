@@ -161,34 +161,84 @@ function copyIfExists(sourcePath: string, targetPath: string): void {
   fs.cpSync(sourcePath, targetPath, { recursive: true });
 }
 
-function copyPrismaRuntimeNodeModules(backendProjectDir: string, backendOutputDir: string): void {
-  const prismaClientRuntimeSources = [
-    {
-      from: path.join(backendProjectDir, "node_modules", ".prisma", "client"),
-      to: path.join(backendOutputDir, "node_modules", ".prisma", "client"),
-    },
-    {
-      from: path.join(backendProjectDir, "node_modules", "@prisma", "client"),
-      to: path.join(backendOutputDir, "node_modules", "@prisma", "client"),
-    },
-  ];
+function resolvePrismaRuntimeFiles(prismaClientDir: string): string[] {
+  const wasmFiles = fs
+    .readdirSync(prismaClientDir, { withFileTypes: true })
+    .filter((entry) => entry.isFile() && entry.name.endsWith(".wasm"))
+    .map((entry) => entry.name);
 
-  const missingSources = prismaClientRuntimeSources
-    .filter((entry) => !fs.existsSync(entry.from))
-    .map((entry) => entry.from);
-
-  if (missingSources.length > 0) {
+  if (wasmFiles.length === 0) {
     throw new Error(
       [
-        "Missing Prisma runtime files required for packaged backend.",
-        ...missingSources.map((sourcePath) => `- ${sourcePath}`),
+        "Missing Prisma runtime wasm files required for packaged backend.",
+        `- ${prismaClientDir}`,
         "Run `npm install` and `npx prisma generate` in backend repository, then run `npm run prepare:resources` again.",
       ].join("\n"),
     );
   }
 
-  for (const entry of prismaClientRuntimeSources) {
-    copyIfExists(entry.from, entry.to);
+  const schemaFile = "schema.prisma";
+  if (!fs.existsSync(path.join(prismaClientDir, schemaFile))) {
+    throw new Error(
+      [
+        "Missing Prisma runtime schema file required for packaged backend.",
+        `- ${path.join(prismaClientDir, schemaFile)}`,
+        "Run `npm install` and `npx prisma generate` in backend repository, then run `npm run prepare:resources` again.",
+      ].join("\n"),
+    );
+  }
+
+  return [...wasmFiles, schemaFile];
+}
+
+function copyPrismaRuntimeNodeModules(backendProjectDir: string, backendOutputDir: string): void {
+  const prismaClientSourceDir = path.join(backendProjectDir, "node_modules", ".prisma", "client");
+  const prismaClientOutputDir = path.join(backendOutputDir, "node_modules", ".prisma", "client");
+
+  if (!fs.existsSync(prismaClientSourceDir)) {
+    throw new Error(
+      [
+        "Missing Prisma runtime folder required for packaged backend.",
+        `- ${prismaClientSourceDir}`,
+        "Run `npm install` and `npx prisma generate` in backend repository, then run `npm run prepare:resources` again.",
+      ].join("\n"),
+    );
+  }
+
+  const runtimeFiles = resolvePrismaRuntimeFiles(prismaClientSourceDir);
+  fs.mkdirSync(prismaClientOutputDir, { recursive: true });
+
+  for (const runtimeFile of runtimeFiles) {
+    copyIfExists(
+      path.join(prismaClientSourceDir, runtimeFile),
+      path.join(prismaClientOutputDir, runtimeFile),
+    );
+  }
+}
+
+function normalizePrismaRuntimeNodeModules(targetResourcesRootDir: string): void {
+  const backendOutputDir = path.join(targetResourcesRootDir, "backend");
+  const prismaClientDir = path.join(backendOutputDir, "node_modules", ".prisma", "client");
+
+  // Legacy resources may include `node_modules/@prisma/*`; runtime only needs `.prisma/client`.
+  fs.rmSync(path.join(backendOutputDir, "node_modules", "@prisma"), {
+    recursive: true,
+    force: true,
+  });
+
+  if (!fs.existsSync(prismaClientDir) || !fs.statSync(prismaClientDir).isDirectory()) {
+    return;
+  }
+
+  const requiredFiles = new Set(resolvePrismaRuntimeFiles(prismaClientDir));
+  const entries = fs.readdirSync(prismaClientDir, { withFileTypes: true });
+
+  for (const entry of entries) {
+    if (!entry.isFile() || requiredFiles.has(entry.name)) {
+      continue;
+    }
+
+    fs.rmSync(path.join(prismaClientDir, entry.name), { force: true });
   }
 }
 
@@ -310,6 +360,7 @@ function normalizeBackendRuntimeLayout(targetResourcesRootDir: string): void {
   }
 
   fs.rmSync(path.join(backendOutputDir, "src"), { recursive: true, force: true });
+  normalizePrismaRuntimeNodeModules(targetResourcesRootDir);
 
   if (!fs.existsSync(runtimeViewsDir)) {
     throw new Error(

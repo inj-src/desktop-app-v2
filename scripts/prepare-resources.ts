@@ -11,6 +11,7 @@ import {
   writeBuildBranchMeta,
 } from './prepare-resources-utils';
 import { resolveFreshBuildSelection } from './prepare-resources-selection';
+import { createResourcesArchive, resolveResourcesArchiveLayout } from './resources-archive';
 
 const rootDir = path.resolve(__dirname, '..');
 const backendProjectDir = resolveProjectDir('BACKEND_PROJECT_DIR', [
@@ -32,6 +33,7 @@ const paths = {
   existingFrontendResourcesDir: path.join(resourcesDir, 'frontend'),
   backendBundleFile: 'sasthotech-hospital-backend-v1.cjs',
 };
+const resourcesArchiveLayout = resolveResourcesArchiveLayout(rootDir);
 
 const npmBin = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 
@@ -102,14 +104,18 @@ export async function prepareResources(): Promise<void> {
   if (!selection.backend && !selection.frontend) {
     console.log(paint('No fresh build selected. Reusing build-resources in place...', 'bold'));
     reuseExistingResourcesInPlace(paths);
+    createResourcesArchive(resourcesArchiveLayout);
     console.log(paint('Build resources copied successfully.', 'green'));
+    console.log(paint('Build resources archive created: build-resources/resources.zip', 'green'));
     return;
   }
 
   console.log(paint('Copying build resources for packaging...', 'bold'));
   copyBuildResources(paths, selection);
   writeBuildBranchMeta(resourcesDir, backendMeta, frontendMeta);
+  createResourcesArchive(resourcesArchiveLayout);
   console.log(paint('Build resources copied successfully.', 'green'));
+  console.log(paint('Build resources archive created: build-resources/resources.zip', 'green'));
 }
 
 void prepareResources().catch(error => {
