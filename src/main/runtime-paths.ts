@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
 
 export interface RuntimePathContext {
   appRootDir: string;
@@ -61,6 +62,31 @@ export function ensureBackendRuntimeDirectories(backendDir: string): void {
 
   for (const dirPath of neededDirs) {
     fs.mkdirSync(dirPath, { recursive: true });
+  }
+
+  const secretKeysDir = path.join(backendDir, 'secretKeys');
+  const tokenPublicKeyPath = path.join(secretKeysDir, 'tokenECPublic.pem');
+  const tokenPrivateKeyPath = path.join(secretKeysDir, 'tokenECPrivate.pem');
+
+  if (!fs.existsSync(tokenPublicKeyPath) || !fs.existsSync(tokenPrivateKeyPath)) {
+    const tokenKey = crypto.generateKeyPairSync('rsa', {
+      modulusLength: 4096,
+      publicKeyEncoding: { type: 'spki', format: 'pem' },
+      privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+    });
+
+    fs.writeFileSync(tokenPublicKeyPath, tokenKey.publicKey, 'utf8');
+    fs.writeFileSync(tokenPrivateKeyPath, tokenKey.privateKey, 'utf8');
+  }
+
+  const requiredPublicKeys = ['pharmacyPublicKey.pem', 'prescriptionPublicKey.pem'];
+  for (const fileName of requiredPublicKeys) {
+    const filePath = path.join(secretKeysDir, fileName);
+    if (!fs.existsSync(filePath)) {
+      throw new Error(
+        `Missing backend key file: ${filePath}. Rebuild with complete build-resources (run npm run prepare:resources).`
+      );
+    }
   }
 }
 

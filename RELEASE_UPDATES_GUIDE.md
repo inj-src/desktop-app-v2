@@ -40,6 +40,17 @@ If missing, CI fails with an instruction to run `npm run prepare:resources` firs
 
 The workflow injects these from the current repository context.
 
+Windows code signing (optional for current setup):
+
+- `CSC_LINK` (from GitHub secret `WINDOWS_CSC_LINK`)
+- `CSC_KEY_PASSWORD` (from GitHub secret `WINDOWS_CSC_KEY_PASSWORD`)
+
+Notes:
+
+- `publisherName` is set to `Sasthotech` in `package.json`.
+- Update code-signature verification is currently disabled (`win.verifyUpdateCodeSignature=false`) to allow unsigned update flow.
+- This is less secure; re-enable signature verification once certificate-based signing is ready.
+
 ## 4) Auto-update behavior in app
 
 Main-process updater service: `src/main/updater-service.ts`
@@ -60,6 +71,8 @@ If you need to test publishing locally:
 GH_TOKEN=your_token \
 GH_RELEASE_OWNER=your-org \
 GH_RELEASE_REPO=your-repo \
+CSC_LINK=\"file:///absolute/path/to/cert.p12\" \
+CSC_KEY_PASSWORD=\"your-cert-password\" \
 npm run build -- --publish always --win nsis --x64
 ```
 
