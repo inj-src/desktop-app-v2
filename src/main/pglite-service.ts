@@ -1,16 +1,16 @@
-import fs from 'node:fs';
-import { createHash, randomUUID } from 'node:crypto';
-import path from 'node:path';
+import fs from "node:fs";
+import { createHash, randomUUID } from "node:crypto";
+import path from "node:path";
 
-import { PGlite } from '@electric-sql/pglite';
-import { pg_trgm } from '@electric-sql/pglite/contrib/pg_trgm';
-import { PGLiteSocketServer } from '@electric-sql/pglite-socket';
-import bcrypt from 'bcryptjs';
-import dotenv from 'dotenv';
+import { PGlite } from "@electric-sql/pglite";
+import { pg_trgm } from "@electric-sql/pglite/contrib/pg_trgm";
+import { PGLiteSocketServer } from "@electric-sql/pglite-socket";
+import bcrypt from "bcryptjs";
+import dotenv from "dotenv";
 
-import type { DatabaseMode, DatabaseState } from '../types';
+import type { DatabaseMode, DatabaseState } from "../types";
 
-const EMBEDDED_MIGRATIONS_TABLE = '_embedded_pglite_migrations';
+const EMBEDDED_MIGRATIONS_TABLE = "_embedded_pglite_migrations";
 
 interface PgliteServiceOptions {
   mode: DatabaseMode;
@@ -27,6 +27,7 @@ interface EmbeddedMigrationFile {
   name: string;
   sql: string;
   checksum: string;
+  checksumAliases: string[];
 }
 
 export class PgliteService {
@@ -56,11 +57,11 @@ export class PgliteService {
 
     this.state = {
       mode: this.mode,
-      status: 'stopped',
+      status: "stopped",
       running: false,
-      host: this.mode === 'pglite' ? this.host : null,
-      port: this.mode === 'pglite' ? this.port : null,
-      dataDir: this.mode === 'pglite' ? this.dataDir : null,
+      host: this.mode === "pglite" ? this.host : null,
+      port: this.mode === "pglite" ? this.port : null,
+      dataDir: this.mode === "pglite" ? this.dataDir : null,
       connectionString: null,
       lastError: null,
     };
@@ -75,19 +76,19 @@ export class PgliteService {
   }
 
   async start(): Promise<void> {
-    if (this.state.running || this.state.status === 'starting') {
+    if (this.state.running || this.state.status === "starting") {
       return;
     }
 
-    this.onLog('database', 'system', `Database mode selected: ${this.mode}`);
+    this.onLog("database", "system", `Database mode selected: ${this.mode}`);
 
     this.setState({
-      status: 'starting',
+      status: "starting",
       running: false,
       lastError: null,
     });
 
-    if (this.mode === 'external-postgres') {
+    if (this.mode === "external-postgres") {
       await this.startExternalMode();
       return;
     }
@@ -96,9 +97,9 @@ export class PgliteService {
   }
 
   async stop(): Promise<void> {
-    if (this.mode === 'external-postgres') {
+    if (this.mode === "external-postgres") {
       this.setState({
-        status: 'stopped',
+        status: "stopped",
         running: false,
         connectionString: null,
       });
@@ -107,27 +108,27 @@ export class PgliteService {
 
     await this.stopPgliteInternals();
     this.setState({
-      status: 'stopped',
+      status: "stopped",
       running: false,
       connectionString: null,
     });
   }
 
   private async startExternalMode(): Promise<void> {
-    const externalUrl = (this.externalDatabaseUrl || process.env.DATABASE_URL || '').trim();
+    const externalUrl = (this.externalDatabaseUrl || process.env.DATABASE_URL || "").trim();
     if (!externalUrl) {
       this.setState({
-        status: 'error',
+        status: "error",
         running: false,
         lastError:
-          'DB_MODE=external-postgres requires DATABASE_URL_EXTERNAL (or DATABASE_URL) to be set.',
+          "DB_MODE=external-postgres requires DATABASE_URL_EXTERNAL (or DATABASE_URL) to be set.",
       });
-      throw new Error(this.state.lastError ?? 'External database URL is missing.');
+      throw new Error(this.state.lastError ?? "External database URL is missing.");
     }
 
     const parsed = safeParseUrl(externalUrl);
     this.setState({
-      status: 'running',
+      status: "running",
       running: true,
       connectionString: externalUrl,
       host: parsed?.hostname || null,
@@ -136,7 +137,7 @@ export class PgliteService {
       lastError: null,
     });
 
-    this.onLog('database', 'system', 'Using external PostgreSQL database mode.');
+    this.onLog("database", "system", "Using external PostgreSQL database mode.");
   }
 
   private async startPgliteMode(): Promise<void> {
@@ -156,28 +157,36 @@ export class PgliteService {
       await this.startSocketServer();
       await this.runEmbeddedSetup();
 
-      const databaseUrl = normalizeDatabaseUrl(this.socketServer!.getServerConn(), this.host, this.port);
+      const databaseUrl = normalizeDatabaseUrl(
+        this.socketServer!.getServerConn(),
+        this.host,
+        this.port,
+      );
 
       this.setState({
-        status: 'running',
+        status: "running",
         running: true,
         connectionString: databaseUrl,
         lastError: null,
       });
 
-      this.onLog('database', 'system', `PGlite socket server listening on ${this.host}:${this.port}`);
+      this.onLog(
+        "database",
+        "system",
+        `PGlite socket server listening on ${this.host}:${this.port}`,
+      );
     } catch (error) {
       await this.stopPgliteInternals();
 
       const message = error instanceof Error ? error.message : String(error);
       this.setState({
-        status: 'error',
+        status: "error",
         running: false,
         connectionString: null,
         lastError: message,
       });
 
-      this.onLog('database', 'error', `Failed to start embedded database: ${message}`);
+      this.onLog("database", "error", `Failed to start embedded database: ${message}`);
       throw error;
     }
   }
@@ -188,7 +197,7 @@ export class PgliteService {
         await this.socketServer.stop();
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        this.onLog('database', 'error', `Failed stopping socket server: ${message}`);
+        this.onLog("database", "error", `Failed stopping socket server: ${message}`);
       }
       this.socketServer = null;
     }
@@ -198,7 +207,7 @@ export class PgliteService {
         await this.db.close();
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        this.onLog('database', 'error', `Failed closing PGlite database: ${message}`);
+        this.onLog("database", "error", `Failed closing PGlite database: ${message}`);
       }
       this.db = null;
     }
@@ -206,7 +215,7 @@ export class PgliteService {
 
   private async startSocketServer(): Promise<void> {
     if (!this.db) {
-      throw new Error('PGlite is not initialized.');
+      throw new Error("PGlite is not initialized.");
     }
 
     const socketServer = new PGLiteSocketServer({
@@ -215,10 +224,11 @@ export class PgliteService {
       port: this.port,
     });
 
-    socketServer.addEventListener('error', event => {
+    socketServer.addEventListener("error", (event) => {
       const payload = event as unknown as { error?: unknown };
-      const message = payload.error instanceof Error ? payload.error.message : 'Unknown socket error';
-      this.onLog('database', 'error', `Socket server error: ${message}`);
+      const message =
+        payload.error instanceof Error ? payload.error.message : "Unknown socket error";
+      this.onLog("database", "error", `Socket server error: ${message}`);
     });
 
     await socketServer.start();
@@ -227,32 +237,36 @@ export class PgliteService {
 
   private async runCompatibilityChecks(): Promise<void> {
     if (!this.db) {
-      throw new Error('PGlite is not initialized.');
+      throw new Error("PGlite is not initialized.");
     }
 
-    this.onLog('database', 'system', 'Running PGlite compatibility preflight checks...');
+    this.onLog("database", "system", "Running PGlite compatibility preflight checks...");
 
-    await this.db.query('SELECT version();');
+    await this.db.query("SELECT version();");
     await this.db.query("SELECT to_tsvector('english', 'sasthotech pglite check') AS vector;");
-    await this.db.exec('DO $$ BEGIN PERFORM 1; END $$ LANGUAGE plpgsql;');
-    await this.db.exec('CREATE EXTENSION IF NOT EXISTS pg_trgm;');
+    await this.db.exec("DO $$ BEGIN PERFORM 1; END $$ LANGUAGE plpgsql;");
+    await this.db.exec("CREATE EXTENSION IF NOT EXISTS pg_trgm;");
     await this.db.query("SELECT similarity('sasthotech', 'sasthotek') AS score;");
 
-    this.onLog('database', 'system', 'Compatibility checks passed.');
+    this.onLog("database", "system", "Compatibility checks passed.");
   }
 
   private async runEmbeddedMigrations(): Promise<void> {
     if (!this.db) {
-      throw new Error('PGlite is not initialized.');
+      throw new Error("PGlite is not initialized.");
     }
 
-    const migrationsDir = path.join(this.backendDir, 'prisma', 'migrations');
+    const migrationsDir = path.join(this.backendDir, "prisma", "migrations");
     if (!fs.existsSync(migrationsDir)) {
       throw new Error(`Prisma migrations directory not found at ${migrationsDir}`);
     }
 
     const migrations = loadEmbeddedMigrations(migrationsDir);
-    this.onLog('database', 'system', `Loaded ${migrations.length} migration files for embedded apply.`);
+    this.onLog(
+      "database",
+      "system",
+      `Loaded ${migrations.length} migration files for embedded apply.`,
+    );
 
     await this.db.exec(`
       CREATE TABLE IF NOT EXISTS "public"."${EMBEDDED_MIGRATIONS_TABLE}" (
@@ -281,9 +295,9 @@ export class PgliteService {
     for (const migration of migrations) {
       const previousChecksum = appliedMap.get(migration.name);
       if (previousChecksum) {
-        if (previousChecksum !== migration.checksum) {
+        if (!migration.checksumAliases.includes(previousChecksum)) {
           throw new Error(
-            `Migration "${migration.name}" checksum mismatch in embedded migration table. Existing=${previousChecksum}, current=${migration.checksum}.`
+            `Migration "${migration.name}" checksum mismatch in embedded migration table. Existing=${previousChecksum}, current=${migration.checksum}.`,
           );
         }
 
@@ -291,7 +305,7 @@ export class PgliteService {
         continue;
       }
 
-      this.onLog('database', 'system', `Applying embedded migration ${migration.name}...`);
+      this.onLog("database", "system", `Applying embedded migration ${migration.name}...`);
       const startedAt = Date.now();
 
       try {
@@ -303,47 +317,55 @@ export class PgliteService {
 
       await this.db.query(
         `INSERT INTO "public"."${EMBEDDED_MIGRATIONS_TABLE}" ("migration_name", "checksum", "applied_at") VALUES ($1, $2, NOW())`,
-        [migration.name, migration.checksum]
+        [migration.name, migration.checksum],
       );
 
       appliedMap.set(migration.name, migration.checksum);
       appliedCount += 1;
       this.onLog(
-        'database',
-        'system',
-        `Applied embedded migration ${migration.name} in ${Date.now() - startedAt}ms.`
+        "database",
+        "system",
+        `Applied embedded migration ${migration.name} in ${Date.now() - startedAt}ms.`,
       );
     }
 
     this.onLog(
-      'database',
-      'system',
-      `Embedded migrations completed. Applied=${appliedCount}, skipped=${skippedCount}.`
+      "database",
+      "system",
+      `Embedded migrations completed. Applied=${appliedCount}, skipped=${skippedCount}.`,
     );
   }
 
   private async runEmbeddedSetup(): Promise<boolean> {
-    const shouldRunSetup = process.env.PGLITE_RUN_SETUP !== 'false';
+    const shouldRunSetup = process.env.PGLITE_RUN_SETUP !== "false";
 
     if (!shouldRunSetup) {
-      this.onLog('database', 'system', 'Skipping embedded setup because PGLITE_RUN_SETUP=false.');
+      this.onLog("database", "system", "Skipping embedded setup because PGLITE_RUN_SETUP=false.");
       return false;
     }
 
     if (!this.db) {
-      throw new Error('PGlite is not initialized.');
+      throw new Error("PGlite is not initialized.");
     }
 
     const fileEnv = this.readBackendEnvFile();
-    const superAdminName = (process.env.SUPER_ADMIN_NAME || fileEnv.SUPER_ADMIN_NAME || '').trim();
-    const superAdminEmail = (process.env.SUPER_ADMIN_EMAIL || fileEnv.SUPER_ADMIN_EMAIL || '').trim();
-    const superAdminPassword = (process.env.SUPER_ADMIN_PASSWORD || fileEnv.SUPER_ADMIN_PASSWORD || '').trim();
+    const superAdminName = (process.env.SUPER_ADMIN_NAME || fileEnv.SUPER_ADMIN_NAME || "").trim();
+    const superAdminEmail = (
+      process.env.SUPER_ADMIN_EMAIL ||
+      fileEnv.SUPER_ADMIN_EMAIL ||
+      ""
+    ).trim();
+    const superAdminPassword = (
+      process.env.SUPER_ADMIN_PASSWORD ||
+      fileEnv.SUPER_ADMIN_PASSWORD ||
+      ""
+    ).trim();
 
     if (!superAdminName || !superAdminEmail || !superAdminPassword) {
       this.onLog(
-        'database',
-        'system',
-        'Skipping embedded setup because SUPER_ADMIN_NAME/SUPER_ADMIN_EMAIL/SUPER_ADMIN_PASSWORD are not configured.'
+        "database",
+        "system",
+        "Skipping embedded setup because SUPER_ADMIN_NAME/SUPER_ADMIN_EMAIL/SUPER_ADMIN_PASSWORD are not configured.",
       );
       return false;
     }
@@ -354,31 +376,31 @@ export class PgliteService {
     await this.db.query(
       `INSERT INTO "public"."User" ("id", "name", "email", "password", "role", "createdAt", "updatedAt")
        VALUES ($1, $2, $3, $4, $5, NOW(), NOW());`,
-      [randomUUID(), superAdminName, superAdminEmail, passwordHash, 'superadmin']
+      [randomUUID(), superAdminName, superAdminEmail, passwordHash, "superadmin"],
     );
 
-    this.onLog('database', 'system', 'Embedded superadmin setup finished successfully.');
+    this.onLog("database", "system", "Embedded superadmin setup finished successfully.");
     return true;
   }
 
   private readBackendEnvFile(): Record<string, string> {
-    const envPath = path.join(this.backendDir, '.env');
+    const envPath = path.join(this.backendDir, ".env");
     if (!fs.existsSync(envPath)) {
       return {};
     }
 
     try {
-      return dotenv.parse(fs.readFileSync(envPath, 'utf8'));
+      return dotenv.parse(fs.readFileSync(envPath, "utf8"));
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
-      this.onLog('database', 'error', `Failed to parse ${envPath}: ${reason}`);
+      this.onLog("database", "error", `Failed to parse ${envPath}: ${reason}`);
       return {};
     }
   }
 
   private async importPrismaMigrationHistory(migrations: EmbeddedMigrationFile[]): Promise<void> {
     if (!this.db) {
-      throw new Error('PGlite is not initialized.');
+      throw new Error("PGlite is not initialized.");
     }
 
     const tableExistsResult = await this.db.query<{ exists: boolean }>(`
@@ -430,7 +452,7 @@ export class PgliteService {
         `INSERT INTO "public"."${EMBEDDED_MIGRATIONS_TABLE}" ("migration_name", "checksum", "applied_at")
          VALUES ($1, $2, COALESCE($3::timestamptz, NOW()))
          ON CONFLICT ("migration_name") DO NOTHING;`,
-        [migration.name, migration.checksum, finishedAt]
+        [migration.name, migration.checksum, finishedAt],
       );
 
       importedCount += 1;
@@ -438,17 +460,17 @@ export class PgliteService {
 
     if (importedCount > 0) {
       this.onLog(
-        'database',
-        'system',
-        `Imported ${importedCount} applied migration records from _prisma_migrations.`
+        "database",
+        "system",
+        `Imported ${importedCount} applied migration records from _prisma_migrations.`,
       );
     }
 
     if (unresolvedFailedCount > 0) {
       this.onLog(
-        'database',
-        'system',
-        `Found ${unresolvedFailedCount} unfinished Prisma migration records. Embedded runner will apply any missing migration files directly.`
+        "database",
+        "system",
+        `Found ${unresolvedFailedCount} unfinished Prisma migration records. Embedded runner will apply any missing migration files directly.`,
       );
     }
   }
@@ -462,34 +484,42 @@ export class PgliteService {
 function loadEmbeddedMigrations(migrationsDir: string): EmbeddedMigrationFile[] {
   const dirNames = fs
     .readdirSync(migrationsDir, { withFileTypes: true })
-    .filter(entry => entry.isDirectory())
-    .map(entry => entry.name)
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
     .sort();
 
   const migrations: EmbeddedMigrationFile[] = [];
 
   for (const name of dirNames) {
-    const sqlFilePath = path.join(migrationsDir, name, 'migration.sql');
+    const sqlFilePath = path.join(migrationsDir, name, "migration.sql");
     if (!fs.existsSync(sqlFilePath)) {
       continue;
     }
 
-    const sql = fs.readFileSync(sqlFilePath, 'utf8');
-    const checksum = createHash('sha256').update(sql).digest('hex');
+    const sql = fs.readFileSync(sqlFilePath, "utf8");
+    const canonicalSql = normalizeSqlForChecksum(sql);
+    const checksum = createHash("sha256").update(canonicalSql).digest("hex");
+    const rawChecksum = createHash("sha256").update(sql).digest("hex");
+    const checksumAliases = checksum === rawChecksum ? [checksum] : [checksum, rawChecksum];
 
     migrations.push({
       name,
       sql,
       checksum,
+      checksumAliases,
     });
   }
 
   return migrations;
 }
 
+function normalizeSqlForChecksum(sql: string): string {
+  return sql.replace(/^\uFEFF/, "").replace(/\r\n/g, "\n");
+}
+
 function normalizeDatabaseUrl(connectionString: string, host: string, port: number): string {
-  const trimmed = String(connectionString || '').trim();
-  const normalizedInput = trimmed.includes('://')
+  const trimmed = String(connectionString || "").trim();
+  const normalizedInput = trimmed.includes("://")
     ? trimmed
     : `postgresql://postgres:postgres@${host}:${port}/postgres`;
 
@@ -500,10 +530,10 @@ function normalizeDatabaseUrl(connectionString: string, host: string, port: numb
     parsed = new URL(`postgresql://postgres:postgres@${host}:${port}/postgres`);
   }
 
-  parsed.searchParams.set('sslmode', 'disable');
-  parsed.searchParams.set('pgbouncer', 'true');
-  parsed.searchParams.set('connection_limit', '1');
-  parsed.searchParams.set('pool_timeout', '0');
+  parsed.searchParams.set("sslmode", "disable");
+  parsed.searchParams.set("pgbouncer", "true");
+  parsed.searchParams.set("connection_limit", "1");
+  parsed.searchParams.set("pool_timeout", "0");
   return parsed.toString();
 }
 
