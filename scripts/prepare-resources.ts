@@ -1,9 +1,16 @@
-import fs from 'node:fs';
 import path from 'node:path';
-import { spawn, spawnSync } from 'node:child_process';
-import { createInterface } from 'node:readline/promises';
-import { stdin as input, stdout as output } from 'node:process';
-import { pathToFileURL } from 'node:url';
+import {
+  assertExpectedBranch,
+  copyBuildResources,
+  directoryExists,
+  paint,
+  readProjectGitMeta,
+  resolveProjectDir,
+  reuseExistingResourcesInPlace,
+  runCommand,
+  writeBuildBranchMeta,
+} from './prepare-resources-utils';
+import { resolveFreshBuildSelection } from './prepare-resources-selection';
 
 const rootDir = path.resolve(__dirname, '..');
 const backendProjectDir = resolveProjectDir('BACKEND_PROJECT_DIR', [
@@ -14,334 +21,21 @@ const frontendProjectDir = resolveProjectDir('FRONTEND_PROJECT_DIR', [
   path.resolve(rootDir, '../hospital_v1'),
   path.resolve(rootDir, 'hospital_v1'),
 ]);
+
 const resourcesDir = path.join(rootDir, 'build-resources');
-const tempResourcesDir = path.join(rootDir, 'build-resources.tmp');
-const existingBackendResourcesDir = path.join(resourcesDir, 'backend');
-const existingFrontendResourcesDir = path.join(resourcesDir, 'frontend');
-const backendBundleFile = 'sasthotech-hospital-backend-v1.cjs';
+const paths = {
+  backendProjectDir,
+  frontendProjectDir,
+  resourcesDir,
+  tempResourcesDir: path.join(rootDir, 'build-resources.tmp'),
+  existingBackendResourcesDir: path.join(resourcesDir, 'backend'),
+  existingFrontendResourcesDir: path.join(resourcesDir, 'frontend'),
+  backendBundleFile: 'sasthotech-hospital-backend-v1.cjs',
+};
 
 const npmBin = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 
-interface ProjectGitMeta {
-  branch: string;
-  commit: string;
-}
-
-interface FreshBuildSelection {
-  backend: boolean;
-  frontend: boolean;
-}
-
-function resolveProjectDir(envName: string, fallbacks: string[]): string {
-  const envValue = process.env[envName];
-  const candidates = envValue ? [path.resolve(envValue), ...fallbacks] : fallbacks;
-
-  for (const candidate of candidates) {
-    if (!fs.existsSync(candidate)) {
-      continue;
-    }
-
-    if (!fs.statSync(candidate).isDirectory()) {
-      continue;
-    }
-
-    return candidate;
-  }
-
-  const message = [`Unable to resolve project directory for ${envName}.`, ...candidates.map(value => `- ${value}`)];
-  throw new Error(message.join('\n'));
-}
-
-function readProjectGitMeta(projectDir: string): ProjectGitMeta | null {
-  const branchResult = spawnSync('git', ['-C', projectDir, 'branch', '--show-current'], {
-    encoding: 'utf8',
-  });
-  const commitResult = spawnSync('git', ['-C', projectDir, 'rev-parse', '--short', 'HEAD'], {
-    encoding: 'utf8',
-  });
-
-  if (branchResult.status !== 0 || commitResult.status !== 0) {
-    return null;
-  }
-
-  const branch = branchResult.stdout.trim() || 'detached-head';
-  const commit = commitResult.stdout.trim() || 'unknown';
-  return { branch, commit };
-}
-
-function assertExpectedBranch(projectLabel: string, meta: ProjectGitMeta | null, expectedBranch: string): void {
-  if (!meta) {
-    throw new Error(`${projectLabel} is not a git repository, cannot validate expected branch "${expectedBranch}".`);
-  }
-
-  if (meta.branch !== expectedBranch) {
-    throw new Error(
-      `${projectLabel} branch mismatch. Expected "${expectedBranch}" but found "${meta.branch}" (${meta.commit}).`
-    );
-  }
-}
-
-function writeBuildBranchMeta(
-  backendMeta: ProjectGitMeta | null,
-  frontendMeta: ProjectGitMeta | null
-): void {
-  const metadataPath = path.join(resourcesDir, 'build-meta.json');
-  const payload = {
-    builtAt: new Date().toISOString(),
-    backend: backendMeta,
-    frontend: frontendMeta,
-  };
-
-  fs.writeFileSync(metadataPath, JSON.stringify(payload, null, 2), 'utf8');
-}
-
-function directoryExists(directoryPath: string): boolean {
-  return fs.existsSync(directoryPath) && fs.statSync(directoryPath).isDirectory();
-}
-
-function parseSelectionInput(value: string): FreshBuildSelection {
-  const normalized = value.trim().toLowerCase();
-
-  if (!normalized || normalized === 'n' || normalized === 'none') {
-    return { backend: false, frontend: false };
-  }
-
-  if (normalized === 'b' || normalized === 'backend') {
-    return { backend: true, frontend: false };
-  }
-
-  if (normalized === 'f' || normalized === 'frontend') {
-    return { backend: false, frontend: true };
-  }
-
-  if (
-    normalized === 'bf' ||
-    normalized === 'fb' ||
-    normalized === 'both' ||
-    normalized === 'all' ||
-    normalized === 'backend,frontend' ||
-    normalized === 'frontend,backend'
-  ) {
-    return { backend: true, frontend: true };
-  }
-
-  const letters = new Set(normalized.replace(/[\s,]+/g, '').split(''));
-  return {
-    backend: letters.has('b'),
-    frontend: letters.has('f'),
-  };
-}
-
-async function askFreshBuildSelection(): Promise<FreshBuildSelection> {
-  console.log('Fresh build options (checkbox style):');
-  console.log(`[ ] Backend  (${backendProjectDir})`);
-  console.log(`[ ] Frontend (${frontendProjectDir})`);
-  console.log('Select with: b=backend, f=frontend, bf=both, n=none');
-
-  const rl = createInterface({ input, output });
-  try {
-    const answer = await rl.question('Fresh build selection [n]: ');
-    const parsed = parseSelectionInput(answer);
-    return parsed;
-  } finally {
-    rl.close();
-  }
-}
-
-async function resolveFreshBuildSelection(): Promise<FreshBuildSelection> {
-  const hasBackendResources = directoryExists(existingBackendResourcesDir);
-  const hasFrontendResources = directoryExists(existingFrontendResourcesDir);
-  const canPrompt = hasBackendResources && hasFrontendResources && input.isTTY && output.isTTY;
-
-  if (!canPrompt) {
-    if (!hasBackendResources || !hasFrontendResources) {
-      console.log('Missing existing build-resources for backend/frontend. Running a fresh build for both.');
-      return { backend: true, frontend: true };
-    }
-
-    console.log('Non-interactive terminal detected. Reusing existing backend/frontend builds.');
-    return { backend: false, frontend: false };
-  }
-
-  return askFreshBuildSelection();
-}
-
-function runCommand(label: string, cwd: string, args: string[]): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const child = spawn(npmBin, args, {
-      cwd,
-      env: process.env,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-
-    child.stdout.on('data', data => {
-      process.stdout.write(`[${label}] ${data}`);
-    });
-
-    child.stderr.on('data', data => {
-      process.stderr.write(`[${label}] ${data}`);
-    });
-
-    child.on('error', reject);
-
-    child.on('close', code => {
-      if (code === 0) {
-        resolve();
-        return;
-      }
-
-      reject(new Error(`${label} exited with code ${code}`));
-    });
-  });
-}
-
-function copyIfExists(sourcePath: string, targetPath: string): void {
-  if (!fs.existsSync(sourcePath)) {
-    return;
-  }
-
-  fs.cpSync(sourcePath, targetPath, { recursive: true });
-}
-
-function pruneArtifacts(rootDir: string, shouldDelete: (filePath: string) => boolean): number {
-  if (!fs.existsSync(rootDir)) {
-    return 0;
-  }
-
-  let removedCount = 0;
-  const queue: string[] = [rootDir];
-
-  while (queue.length > 0) {
-    const current = queue.pop();
-    if (!current) {
-      continue;
-    }
-
-    const entries = fs.readdirSync(current, { withFileTypes: true });
-    for (const entry of entries) {
-      const fullPath = path.join(current, entry.name);
-
-      if (entry.isDirectory()) {
-        queue.push(fullPath);
-        continue;
-      }
-
-      if (!entry.isFile()) {
-        continue;
-      }
-
-      if (!shouldDelete(fullPath)) {
-        continue;
-      }
-
-      fs.rmSync(fullPath, { force: true });
-      removedCount += 1;
-    }
-  }
-
-  return removedCount;
-}
-
-function pruneBackendBuildArtifacts(targetResourcesRootDir: string): void {
-  const backendOutputDir = path.join(targetResourcesRootDir, 'backend');
-  const removedCount = pruneArtifacts(backendOutputDir, filePath => filePath.endsWith('.map'));
-  if (removedCount > 0) {
-    console.log(`Pruned ${removedCount} backend sourcemap files.`);
-  }
-}
-
-function pruneFrontendBuildArtifacts(targetResourcesRootDir: string): void {
-  const frontendOutputDir = path.join(targetResourcesRootDir, 'frontend');
-  const removedCount = pruneArtifacts(frontendOutputDir, filePath => {
-    const normalized = filePath.replace(/\\/g, '/');
-    return normalized.endsWith('.map') || normalized.endsWith('/.DS_Store');
-  });
-
-  if (removedCount > 0) {
-    console.log(`Pruned ${removedCount} frontend sourcemap/metadata files.`);
-  }
-}
-
-function resolveFrontendStaticDir(): string {
-  const outputDir = path.join(frontendProjectDir, 'output');
-  const outDir = path.join(frontendProjectDir, 'out');
-
-  if (fs.existsSync(outputDir) && fs.statSync(outputDir).isDirectory()) {
-    return outputDir;
-  }
-
-  if (fs.existsSync(outDir) && fs.statSync(outDir).isDirectory()) {
-    return outDir;
-  }
-
-  throw new Error(`Frontend static output not found. Checked: ${outputDir}, ${outDir}`);
-}
-
-function copyBackendResources(targetResourcesRootDir: string): void {
-  const backendOutputDir = path.join(targetResourcesRootDir, 'backend');
-  fs.mkdirSync(backendOutputDir, { recursive: true });
-
-  const staticItems = ['prisma', 'package.json', 'data', 'secretKeys', backendBundleFile];
-
-  for (const item of staticItems) {
-    copyIfExists(path.join(backendProjectDir, item), path.join(backendOutputDir, item));
-  }
-
-  copyIfExists(path.join(backendProjectDir, 'src', 'views'), path.join(backendOutputDir, 'views'));
-
-  const rootEntries = fs.readdirSync(backendProjectDir, { withFileTypes: true });
-
-  for (const entry of rootEntries) {
-    if (!entry.isFile() || !entry.name.startsWith('.env')) {
-      continue;
-    }
-
-    copyIfExists(path.join(backendProjectDir, entry.name), path.join(backendOutputDir, entry.name));
-  }
-
-  fs.mkdirSync(path.join(backendOutputDir, 'data', 'image'), { recursive: true });
-  fs.mkdirSync(path.join(backendOutputDir, 'data', 'file'), { recursive: true });
-  fs.mkdirSync(path.join(backendOutputDir, 'secretKeys'), { recursive: true });
-  fs.rmSync(path.join(backendOutputDir, 'node_modules'), { recursive: true, force: true });
-}
-
-function normalizeBackendRuntimeLayout(targetResourcesRootDir: string): void {
-  const backendOutputDir = path.join(targetResourcesRootDir, 'backend');
-  const legacyViewsDir = path.join(backendOutputDir, 'src', 'views');
-  const runtimeViewsDir = path.join(backendOutputDir, 'views');
-
-  if (!fs.existsSync(runtimeViewsDir) && fs.existsSync(legacyViewsDir)) {
-    fs.mkdirSync(path.dirname(runtimeViewsDir), { recursive: true });
-    fs.cpSync(legacyViewsDir, runtimeViewsDir, { recursive: true });
-  }
-
-  fs.rmSync(path.join(backendOutputDir, 'src'), { recursive: true, force: true });
-
-  if (!fs.existsSync(runtimeViewsDir)) {
-    throw new Error(
-      `Backend runtime views directory is missing: ${runtimeViewsDir}. Ensure templates are available before packaging.`
-    );
-  }
-}
-
-function copyFrontendResources(targetResourcesRootDir: string): void {
-  const frontendOutputDir = path.join(targetResourcesRootDir, 'frontend');
-  fs.mkdirSync(frontendOutputDir, { recursive: true });
-
-  const staticDir = resolveFrontendStaticDir();
-  const staticDirName = path.basename(staticDir);
-
-  copyIfExists(staticDir, path.join(frontendOutputDir, staticDirName));
-}
-
-function assertBackendBundleExists(targetResourcesRootDir: string): void {
-  const bundledEntryPath = path.join(targetResourcesRootDir, 'backend', backendBundleFile);
-  if (!fs.existsSync(bundledEntryPath)) {
-    throw new Error(`Backend bundled entry was not found: ${bundledEntryPath}`);
-  }
-}
-
-export async function prepareResources(): Promise<void> {
+function printSourceMeta(): { backendMeta: ReturnType<typeof readProjectGitMeta>; frontendMeta: ReturnType<typeof readProjectGitMeta> } {
   const backendMeta = readProjectGitMeta(backendProjectDir);
   const frontendMeta = readProjectGitMeta(frontendProjectDir);
 
@@ -353,6 +47,13 @@ export async function prepareResources(): Promise<void> {
     console.log(`Frontend source: branch=${frontendMeta.branch}, commit=${frontendMeta.commit}`);
   }
 
+  return { backendMeta, frontendMeta };
+}
+
+function validateExpectedBranches(
+  backendMeta: ReturnType<typeof readProjectGitMeta>,
+  frontendMeta: ReturnType<typeof readProjectGitMeta>
+): void {
   const expectedBackendBranch = (process.env.EXPECTED_BACKEND_BRANCH || '').trim();
   const expectedFrontendBranch = (process.env.EXPECTED_FRONTEND_BRANCH || '').trim();
 
@@ -363,57 +64,55 @@ export async function prepareResources(): Promise<void> {
   if (expectedFrontendBranch) {
     assertExpectedBranch('frontend', frontendMeta, expectedFrontendBranch);
   }
+}
 
-  const freshBuildSelection = await resolveFreshBuildSelection();
+async function runSelectedBuilds(backend: boolean, frontend: boolean): Promise<void> {
   const buildTasks: Promise<void>[] = [];
 
-  if (freshBuildSelection.backend) {
-    buildTasks.push(runCommand('backend-build', backendProjectDir, ['run', 'build']));
+  if (backend) {
+    buildTasks.push(runCommand('backend-build', backendProjectDir, ['run', 'build'], npmBin));
   }
 
-  if (freshBuildSelection.frontend) {
-    buildTasks.push(runCommand('frontend-build', frontendProjectDir, ['run', 'build:offline']));
+  if (frontend) {
+    buildTasks.push(runCommand('frontend-build', frontendProjectDir, ['run', 'build:offline'], npmBin));
   }
 
-  if (buildTasks.length > 0) {
-    console.log('Running selected fresh builds...');
-    await Promise.all(buildTasks);
-  } else {
-    console.log('Skipping fresh backend/frontend builds and using current build outputs.');
+  if (buildTasks.length === 0) {
+    console.log(paint('Skipping fresh backend/frontend builds and using current build outputs.', 'yellow'));
+    return;
   }
 
-  console.log('Copying build resources for packaging...');
-
-  fs.rmSync(tempResourcesDir, { recursive: true, force: true });
-  fs.mkdirSync(tempResourcesDir, { recursive: true });
-
-  if (freshBuildSelection.backend) {
-    copyBackendResources(tempResourcesDir);
-  } else {
-    copyIfExists(existingBackendResourcesDir, path.join(tempResourcesDir, 'backend'));
-  }
-
-  normalizeBackendRuntimeLayout(tempResourcesDir);
-  fs.rmSync(path.join(tempResourcesDir, 'backend', 'node_modules'), { recursive: true, force: true });
-  assertBackendBundleExists(tempResourcesDir);
-
-  if (freshBuildSelection.frontend) {
-    copyFrontendResources(tempResourcesDir);
-  } else {
-    copyIfExists(existingFrontendResourcesDir, path.join(tempResourcesDir, 'frontend'));
-  }
-
-  pruneBackendBuildArtifacts(tempResourcesDir);
-  pruneFrontendBuildArtifacts(tempResourcesDir);
-
-  fs.rmSync(resourcesDir, { recursive: true, force: true });
-  fs.renameSync(tempResourcesDir, resourcesDir);
-  writeBuildBranchMeta(backendMeta, frontendMeta);
+  console.log(paint('Running selected fresh builds...', 'bold'));
+  await Promise.all(buildTasks);
 }
 
-if (pathToFileURL(process.argv[1]).href === import.meta.url) {
-  void prepareResources().catch(error => {
-    console.error(error);
-    process.exit(1);
-  });
+export async function prepareResources(): Promise<void> {
+  const { backendMeta, frontendMeta } = printSourceMeta();
+  validateExpectedBranches(backendMeta, frontendMeta);
+
+  const selection = await resolveFreshBuildSelection(
+    directoryExists(paths.existingBackendResourcesDir),
+    directoryExists(paths.existingFrontendResourcesDir),
+    backendProjectDir,
+    frontendProjectDir
+  );
+
+  await runSelectedBuilds(selection.backend, selection.frontend);
+
+  if (!selection.backend && !selection.frontend) {
+    console.log(paint('No fresh build selected. Reusing build-resources in place...', 'bold'));
+    reuseExistingResourcesInPlace(paths);
+    console.log(paint('Build resources copied successfully.', 'green'));
+    return;
+  }
+
+  console.log(paint('Copying build resources for packaging...', 'bold'));
+  copyBuildResources(paths, selection);
+  writeBuildBranchMeta(resourcesDir, backendMeta, frontendMeta);
+  console.log(paint('Build resources copied successfully.', 'green'));
 }
+
+void prepareResources().catch(error => {
+  console.error(paint(String(error), 'red'));
+  process.exit(1);
+});
