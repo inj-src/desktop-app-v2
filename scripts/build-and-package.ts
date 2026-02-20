@@ -8,6 +8,25 @@ const resourcesRootDir = path.join(rootDir, 'build-resources');
 const backendResourcesDir = path.join(resourcesRootDir, 'backend');
 const frontendResourcesDir = path.join(resourcesRootDir, 'frontend');
 
+function buildSpawnEnv(): NodeJS.ProcessEnv {
+  // On Windows + Git Bash, inherited env can include invalid keys for CreateProcess
+  // (for example exported shell-function variables). Filter those out to avoid EINVAL.
+  const nextEnv: NodeJS.ProcessEnv = {};
+  for (const [key, value] of Object.entries(process.env)) {
+    if (typeof value !== 'string') {
+      continue;
+    }
+
+    if (key.includes('=') || key.includes('\0')) {
+      continue;
+    }
+
+    nextEnv[key] = value;
+  }
+
+  return nextEnv;
+}
+
 function assertPreparedResources(): void {
   if (
     fs.existsSync(resourcesRootDir) &&
@@ -33,7 +52,7 @@ function runNpm(label: string, args: string[]): Promise<void> {
   return new Promise((resolve, reject) => {
     const child = spawn(npmBin, args, {
       cwd: rootDir,
-      env: process.env,
+      env: buildSpawnEnv(),
       stdio: ['ignore', 'pipe', 'pipe'],
     });
 

@@ -66,6 +66,13 @@
           "!**/*.map",
           "!**/.DS_Store"
         ]
+      },
+      {
+        "from": "assets",
+        "to": "assets",
+        "filter": [
+          "icon.ico"
+        ]
       }
     ],
     "directories": {
@@ -80,6 +87,7 @@
       }
     ],
     "win": {
+      "icon": "assets/icon.ico",
       "target": [
         {
           "target": "nsis",
@@ -88,6 +96,11 @@
           ]
         }
       ]
+    },
+    "nsis": {
+      "installerIcon": "assets/icon.ico",
+      "uninstallerIcon": "assets/icon.ico",
+      "installerHeaderIcon": "assets/icon.ico"
     }
   }
 }

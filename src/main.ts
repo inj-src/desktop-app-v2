@@ -17,7 +17,7 @@ import {
 import { MdnsService } from './main/mdns-service';
 import { PgliteService } from './main/pglite-service';
 import { ProcessService } from './main/process-service';
-import { resolveBackendDir, type RuntimePathContext } from './main/runtime-paths';
+import { resolveAppIconPath, resolveBackendDir, type RuntimePathContext } from './main/runtime-paths';
 import { UpdaterService } from './main/updater-service';
 
 let mainWindow: BrowserWindow | null = null;
@@ -113,6 +113,7 @@ function createWindow(): void {
     height: 920,
     minWidth: 1100,
     minHeight: 700,
+    icon: resolveAppIconPath(runtimePathContext),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,

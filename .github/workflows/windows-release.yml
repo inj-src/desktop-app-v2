@@ -45,5 +45,5 @@ jobs:
           npm ci
 
       - name: Build and publish Windows release
-        shell: bash
+        shell: pwsh
         run: npm run build -- --publish always --win nsis --x64

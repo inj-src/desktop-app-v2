@@ -44,6 +44,14 @@ export function resolveFrontendStaticDir(context: RuntimePathContext): string {
   throw new Error(`Unable to find static frontend directory. Checked: ${outputDir} and ${outDir}`);
 }
 
+export function resolveAppIconPath(context: RuntimePathContext): string {
+  if (context.isPackaged) {
+    return path.join(context.appRootDir, 'assets', 'icon.ico');
+  }
+
+  return path.resolve(context.appRootDir, 'assets', 'icon.ico');
+}
+
 export function ensureBackendRuntimeDirectories(backendDir: string): void {
   const neededDirs = [
     path.join(backendDir, 'data', 'image'),
