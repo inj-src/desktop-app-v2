@@ -117,7 +117,7 @@ npm run prepare:resources
 Behavior:
 
 1. If both `build-resources/backend` and `build-resources/frontend` already exist, you get a checkbox-style prompt:
-`b` backend, `f` frontend, `bf` both, `n` none.
+   `b` backend, `f` frontend, `bf` both, `n` none.
 2. If either resource folder is missing, no checkbox prompt is shown and it runs a fresh build for both backend and frontend.
 
 ## 8) Selecting backend/frontend branch for a build
