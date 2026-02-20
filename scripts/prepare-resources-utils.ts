@@ -161,6 +161,37 @@ function copyIfExists(sourcePath: string, targetPath: string): void {
   fs.cpSync(sourcePath, targetPath, { recursive: true });
 }
 
+function copyPrismaRuntimeNodeModules(backendProjectDir: string, backendOutputDir: string): void {
+  const prismaClientRuntimeSources = [
+    {
+      from: path.join(backendProjectDir, "node_modules", ".prisma", "client"),
+      to: path.join(backendOutputDir, "node_modules", ".prisma", "client"),
+    },
+    {
+      from: path.join(backendProjectDir, "node_modules", "@prisma", "client"),
+      to: path.join(backendOutputDir, "node_modules", "@prisma", "client"),
+    },
+  ];
+
+  const missingSources = prismaClientRuntimeSources
+    .filter((entry) => !fs.existsSync(entry.from))
+    .map((entry) => entry.from);
+
+  if (missingSources.length > 0) {
+    throw new Error(
+      [
+        "Missing Prisma runtime files required for packaged backend.",
+        ...missingSources.map((sourcePath) => `- ${sourcePath}`),
+        "Run `npm install` and `npx prisma generate` in backend repository, then run `npm run prepare:resources` again.",
+      ].join("\n"),
+    );
+  }
+
+  for (const entry of prismaClientRuntimeSources) {
+    copyIfExists(entry.from, entry.to);
+  }
+}
+
 function pruneArtifacts(rootDir: string, shouldDelete: (filePath: string) => boolean): number {
   if (!fs.existsSync(rootDir)) {
     return 0;
@@ -265,7 +296,7 @@ function copyBackendResources(paths: PrepareResourcesPaths, targetResourcesRootD
   fs.mkdirSync(path.join(backendOutputDir, "data", "image"), { recursive: true });
   fs.mkdirSync(path.join(backendOutputDir, "data", "file"), { recursive: true });
   fs.mkdirSync(path.join(backendOutputDir, "secretKeys"), { recursive: true });
-  fs.rmSync(path.join(backendOutputDir, "node_modules"), { recursive: true, force: true });
+  copyPrismaRuntimeNodeModules(paths.backendProjectDir, backendOutputDir);
 }
 
 function normalizeBackendRuntimeLayout(targetResourcesRootDir: string): void {
@@ -318,10 +349,6 @@ export function reuseExistingResourcesInPlace(paths: PrepareResourcesPaths): voi
   }
 
   normalizeBackendRuntimeLayout(paths.resourcesDir);
-  fs.rmSync(path.join(paths.resourcesDir, "backend", "node_modules"), {
-    recursive: true,
-    force: true,
-  });
   assertBackendBundleExists(paths, paths.resourcesDir);
   pruneBackendBuildArtifacts(paths.resourcesDir);
   pruneFrontendBuildArtifacts(paths.resourcesDir);
@@ -341,10 +368,6 @@ export function copyBuildResources(
   }
 
   normalizeBackendRuntimeLayout(paths.tempResourcesDir);
-  fs.rmSync(path.join(paths.tempResourcesDir, "backend", "node_modules"), {
-    recursive: true,
-    force: true,
-  });
   assertBackendBundleExists(paths, paths.tempResourcesDir);
 
   if (freshBuildSelection.frontend) {

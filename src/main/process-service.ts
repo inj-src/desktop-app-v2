@@ -1,10 +1,10 @@
-import fs from 'node:fs';
-import path from 'node:path';
-import { spawn, type ChildProcessByStdio } from 'node:child_process';
-import type { Readable } from 'node:stream';
+import fs from "node:fs";
+import path from "node:path";
+import { spawn, type ChildProcessByStdio } from "node:child_process";
+import type { Readable } from "node:stream";
 
-import type { DatabaseMode, ManagedProcessState, ProcessName } from '../types';
-import { PROCESS_NAMES } from './constants';
+import type { DatabaseMode, ManagedProcessState, ProcessName } from "../types";
+import { PROCESS_NAMES } from "./constants";
 import {
   buildPrismaRuntimeEnv,
   ensureBackendRuntimeDirectories,
@@ -12,7 +12,7 @@ import {
   resolveBackendEntry,
   resolveFrontendStaticDir,
   type RuntimePathContext,
-} from './runtime-paths';
+} from "./runtime-paths";
 
 type ManagedChildProcess = ChildProcessByStdio<null, Readable, Readable>;
 
@@ -63,9 +63,9 @@ export class ProcessService {
 
     this.processState = {
       backend: {
-        name: 'backend',
+        name: "backend",
         port: this.backendPort,
-        status: 'stopped',
+        status: "stopped",
         running: false,
         pid: null,
         restarts: 0,
@@ -75,9 +75,9 @@ export class ProcessService {
         localUrl: `http://127.0.0.1:${this.backendPort}`,
       },
       frontend: {
-        name: 'frontend',
+        name: "frontend",
         port: this.frontendPort,
-        status: 'stopped',
+        status: "stopped",
         running: false,
         pid: null,
         restarts: 0,
@@ -101,18 +101,18 @@ export class ProcessService {
   }
 
   async startAll(): Promise<void> {
-    await this.startProcess('backend');
-    await this.startProcess('frontend');
+    await this.startProcess("backend");
+    await this.startProcess("frontend");
   }
 
   async stopAll(): Promise<void> {
-    await this.stopProcess('frontend');
-    await this.stopProcess('backend');
+    await this.stopProcess("frontend");
+    await this.stopProcess("backend");
   }
 
   async restartAll(): Promise<void> {
-    await this.restartProcess('backend');
-    await this.restartProcess('frontend');
+    await this.restartProcess("backend");
+    await this.restartProcess("frontend");
   }
 
   async startProcess(name: ProcessName): Promise<void> {
@@ -120,14 +120,14 @@ export class ProcessService {
       return;
     }
 
-    this.setProcessState(name, { status: 'starting' });
+    this.setProcessState(name, { status: "starting" });
 
     try {
-      const child = name === 'backend' ? this.spawnBackend() : this.spawnFrontend();
+      const child = name === "backend" ? this.spawnBackend() : this.spawnFrontend();
       this.children[name] = child;
 
       this.setProcessState(name, {
-        status: 'running',
+        status: "running",
         running: true,
         pid: child.pid,
         lastExitCode: null,
@@ -135,18 +135,18 @@ export class ProcessService {
       });
 
       this.wireChildLogs(name, child);
-      this.onLog(name, 'system', `Started with pid ${child.pid}`);
+      this.onLog(name, "system", `Started with pid ${child.pid}`);
     } catch (error) {
       this.children[name] = null;
       this.expectedExit[name] = false;
 
       this.setProcessState(name, {
-        status: 'error',
+        status: "error",
         running: false,
         pid: null,
       });
 
-      this.onLog(name, 'error', error instanceof Error ? error.message : String(error));
+      this.onLog(name, "error", error instanceof Error ? error.message : String(error));
     }
   }
 
@@ -157,23 +157,23 @@ export class ProcessService {
     }
 
     this.expectedExit[name] = true;
-    this.setProcessState(name, { status: 'stopping' });
+    this.setProcessState(name, { status: "stopping" });
 
     await this.waitForExitOrTimeout(
       child,
       () => {
-        this.sendSignalToProcessTree(child, 'SIGTERM');
+        this.sendSignalToProcessTree(child, "SIGTERM");
       },
-      5000
+      5000,
     );
 
     if (child.exitCode === null) {
       await this.waitForExitOrTimeout(
         child,
         () => {
-          this.sendSignalToProcessTree(child, 'SIGKILL');
+          this.sendSignalToProcessTree(child, "SIGKILL");
         },
-        2000
+        2000,
       );
     }
   }
@@ -194,10 +194,10 @@ export class ProcessService {
       }
 
       this.expectedExit[name] = true;
-      this.sendSignalToProcessTree(child, 'SIGTERM');
+      this.sendSignalToProcessTree(child, "SIGTERM");
 
       if (child.exitCode === null) {
-        this.sendSignalToProcessTree(child, 'SIGKILL');
+        this.sendSignalToProcessTree(child, "SIGKILL");
       }
     }
   }
@@ -208,29 +208,30 @@ export class ProcessService {
   }
 
   private wireChildLogs(name: ProcessName, child: ManagedChildProcess): void {
-    child.stdout.on('data', chunk => {
-      this.onLog(name, 'stdout', chunk.toString());
+    child.stdout.on("data", (chunk) => {
+      this.onLog(name, "stdout", chunk.toString());
     });
 
-    child.stderr.on('data', chunk => {
-      this.onLog(name, 'stderr', chunk.toString());
+    child.stderr.on("data", (chunk) => {
+      this.onLog(name, "stderr", chunk.toString());
     });
 
-    child.on('error', error => {
-      this.onLog(name, 'error', error.message);
+    child.on("error", (error) => {
+      this.onLog(name, "error", error.message);
       this.setProcessState(name, {
-        status: 'error',
+        status: "error",
         running: false,
         pid: null,
       });
     });
 
-    child.on('exit', (code, signal) => {
+    child.on("exit", (code, signal) => {
       const expected = this.expectedExit[name];
       this.expectedExit[name] = false;
       this.children[name] = null;
 
-      const nextStatus = expected || this.shuttingDown ? 'stopped' : code === 0 ? 'stopped' : 'error';
+      const nextStatus =
+        expected || this.shuttingDown ? "stopped" : code === 0 ? "stopped" : "error";
 
       this.setProcessState(name, {
         status: nextStatus,
@@ -240,7 +241,7 @@ export class ProcessService {
         lastSignal: signal,
       });
 
-      this.onLog(name, 'system', `Exited (code=${code}, signal=${signal})`);
+      this.onLog(name, "system", `Exited (code=${code}, signal=${signal})`);
     });
   }
 
@@ -249,27 +250,38 @@ export class ProcessService {
     const backendEntry = resolveBackendEntry(this.runtimePathContext);
 
     if (!fs.existsSync(backendEntry)) {
-      throw new Error(`Backend entry file was not found: ${backendEntry}`);
+      throw new Error(
+        `Backend entry file was not found: ${backendEntry}. Run npm run prepare:resources and restart the app.`
+      );
     }
 
     ensureBackendRuntimeDirectories(backendDir);
 
     const databaseUrl = this.resolveDatabaseUrl() || process.env.DATABASE_URL || null;
     if (!databaseUrl) {
-      throw new Error('No database URL available. Start database service first.');
+      throw new Error("No database URL available. Start database service first.");
+    }
+
+    const cookieSecret = process.env.COOKIE_SECRET?.trim() || "";
+    if (!cookieSecret) {
+      const message =
+        "Failed to read COOKIE_SECRET. Backend will not start because signed cookies require a valid secret.";
+      this.onLog("backend", "error", message);
+      throw new Error(message);
     }
 
     const env = {
       ...process.env,
-      ELECTRON_RUN_AS_NODE: '1',
-      NODE_ENV: 'production',
+      ELECTRON_RUN_AS_NODE: "1",
+      NODE_ENV: "production",
       PORT: String(this.backendPort),
       CLIENT_URL: `http://${this.hostname}:${this.frontendPort}`,
       DB_MODE: this.databaseMode,
       PRISMA_PG_POOL_MAX:
-        process.env.PRISMA_PG_POOL_MAX ?? (this.databaseMode === 'pglite' ? '1' : '10'),
-      COOKIE_SECURE: process.env.COOKIE_SECURE ?? 'false',
-      COOKIE_SAME_SITE: process.env.COOKIE_SAME_SITE ?? 'lax',
+        process.env.PRISMA_PG_POOL_MAX ?? (this.databaseMode === "pglite" ? "1" : "10"),
+      COOKIE_SECRET: cookieSecret,
+      COOKIE_SECURE: process.env.COOKIE_SECURE ?? "false",
+      COOKIE_SAME_SITE: process.env.COOKIE_SAME_SITE ?? "lax",
       DATABASE_URL: databaseUrl,
       ...buildPrismaRuntimeEnv(backendDir),
     };
@@ -278,40 +290,47 @@ export class ProcessService {
       cwd: backendDir,
       env,
       detached: false,
-      stdio: ['ignore', 'pipe', 'pipe'],
+      stdio: ["ignore", "pipe", "pipe"],
     });
   }
 
   private spawnFrontend(): ManagedChildProcess {
     const frontendStaticDir = resolveFrontendStaticDir(this.runtimePathContext);
-    const serveEntry = require.resolve('serve/build/main.js');
+    const serveEntry = require.resolve("serve/build/main.js");
 
     return spawn(
       process.execPath,
-      [serveEntry, '-s', frontendStaticDir, '-l', `tcp://0.0.0.0:${this.frontendPort}`, '--no-port-switching'],
+      [
+        serveEntry,
+        "-s",
+        frontendStaticDir,
+        "-l",
+        `tcp://0.0.0.0:${this.frontendPort}`,
+        "--no-port-switching",
+      ],
       {
         cwd: frontendStaticDir,
         env: {
           ...process.env,
-          ELECTRON_RUN_AS_NODE: '1',
-          NODE_ENV: 'production',
+          ELECTRON_RUN_AS_NODE: "1",
+          NODE_ENV: "production",
         },
         detached: false,
-        stdio: ['ignore', 'pipe', 'pipe'],
-      }
+        stdio: ["ignore", "pipe", "pipe"],
+      },
     );
   }
 
   private async waitForExitOrTimeout(
     child: ManagedChildProcess,
     kick: () => void,
-    timeoutMs: number
+    timeoutMs: number,
   ): Promise<void> {
     if (child.exitCode !== null) {
       return;
     }
 
-    await new Promise<void>(resolve => {
+    await new Promise<void>((resolve) => {
       let resolved = false;
 
       const finish = () => {
@@ -321,7 +340,7 @@ export class ProcessService {
 
         resolved = true;
         clearTimeout(timer);
-        child.removeListener('exit', onExit);
+        child.removeListener("exit", onExit);
         resolve();
       };
 
@@ -331,7 +350,7 @@ export class ProcessService {
 
       const timer = setTimeout(finish, timeoutMs);
 
-      child.once('exit', onExit);
+      child.once("exit", onExit);
       kick();
     });
   }
@@ -343,16 +362,16 @@ export class ProcessService {
 
     const pid = child.pid;
 
-    if (process.platform === 'win32') {
-      const args = ['/pid', String(pid), '/t'];
+    if (process.platform === "win32") {
+      const args = ["/pid", String(pid), "/t"];
 
-      if (signal === 'SIGKILL') {
-        args.push('/f');
+      if (signal === "SIGKILL") {
+        args.push("/f");
       }
 
-      const killer = spawn('taskkill', args, { stdio: 'ignore' });
-      killer.on('error', error => {
-        this.onLog('system', 'error', `Failed to run taskkill for pid ${pid}: ${error.message}`);
+      const killer = spawn("taskkill", args, { stdio: "ignore" });
+      killer.on("error", (error) => {
+        this.onLog("system", "error", `Failed to run taskkill for pid ${pid}: ${error.message}`);
       });
 
       return;
