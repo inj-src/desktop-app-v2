@@ -25,11 +25,31 @@ jobs:
         run: |
           set -euo pipefail
 
-          if [[ ! -d "${GITHUB_WORKSPACE}/build-resources/backend" || ! -d "${GITHUB_WORKSPACE}/build-resources/frontend" ]]; then
-            echo "::error::Missing build-resources/backend or build-resources/frontend."
-            echo "::error::Run 'npm run prepare:resources' locally first, commit required outputs, then push again."
+          RESOURCES_ZIP="${GITHUB_WORKSPACE}/build-resources/resources.zip"
+
+          if [[ ! -f "${RESOURCES_ZIP}" ]]; then
+            echo "::error::Missing build-resources/resources.zip."
+            echo "::error::Run 'npm run prepare:resources' locally first, commit build-resources/resources.zip, then push again."
             exit 1
           fi
+
+          python - <<'PY'
+          import os
+          import sys
+          import zipfile
+
+          resources_zip = os.path.join(os.environ["GITHUB_WORKSPACE"], "build-resources", "resources.zip")
+          with zipfile.ZipFile(resources_zip, "r") as archive:
+              names = archive.namelist()
+
+          has_backend = any(name.startswith("backend/") for name in names)
+          has_frontend = any(name.startswith("frontend/") for name in names)
+
+          if not has_backend or not has_frontend:
+              print("::error::resources.zip is missing backend/ or frontend/ entries.")
+              print("::error::Run 'npm run prepare:resources' locally and recommit build-resources/resources.zip.")
+              sys.exit(1)
+          PY
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
